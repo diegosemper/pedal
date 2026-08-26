@@ -1,0 +1,3818 @@
+<title>PEDAL!</title>
+<link rel="apple-touch-icon" href="icoon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* ============================================================
+   Opmaak van PEDAL!
+
+   De kleuren staan bovenaan bij elkaar: pas ze daar aan en het
+   verandert overal tegelijk.
+
+   Het spel zelf wordt op een canvas getekend en gebruikt hier
+   niets van; dit gaat alleen over de menu's en de HUD die
+   eroverheen ligt.
+   ============================================================ */
+
+:root {
+  --nacht:      #16233a;   /* de vaste grond van alle schermen */
+  --nacht-diep: #0e1728;
+  --paneel:     #1e2d47;
+  --paneel-op:  #29395a;
+  --room:       #f2eee5;   /* warme, niet-witte tekstkleur */
+  --goud:       #f0c04a;   /* geld, en het belangrijkste accent */
+  --goud-diep:  #b8913a;
+  --klei:       #e0574c;   /* gevaar, gecrasht, te duur */
+  --mos:        #46b45f;   /* gehaald, stamina, veilig */
+  --mist:       #9aa8c4;   /* rustige tekst, blauw getint grijs */
+  --lijn:       rgba(255, 255, 255, 0.10);
+
+  --display: "Lilita One", "Arial Black", sans-serif;
+  --tekst:   "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Wordt door tekenen.js gevuld: hoeveel de browserbalk onderin
+     wegneemt. Zo blijven knoppen altijd bereikbaar. */
+  --onderrand: 0px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--nacht);
+  color: var(--room);
+  font-family: var(--tekst);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.verborgen { display: none !important; }
+
+/* De hoogte hiervan zet tekenen.js zelf. 100dvh is op iOS niet te
+   vertrouwen: de balk schuift weg en komt terug, en dan klopt het
+   canvas niet meer met wat je ziet. */
+.scherm {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+
+/* ============================================================
+   De HUD tijdens het rijden
+   ============================================================ */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;           /* alleen de knoppen vangen aanrakingen */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hud-boven {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* ---- Stamina ---- */
+
+.stamina {
+  position: relative;
+  flex: 0 1 240px;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(10, 20, 35, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+
+.stamina-vulling {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: var(--mos);
+  transition: background-color 0.25s linear;
+}
+
+/* Onder de dertig procent wordt hij oranje, onder de tien rood.
+   spel.js zet deze klassen. */
+.stamina-vulling.moe { background: #e8a13a; }
+.stamina-vulling.op  { background: var(--klei); }
+
+.stamina-woord {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.09em;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* ---- Afstand en snelheid ---- */
+
+.hud-midden {
+  flex: 1 1 auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.afstand {
+  font-family: var(--display);
+  font-size: clamp(24px, 5.5vw, 42px);
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.snelheid {
+  margin-top: 2px;
+  font-weight: 800;
+  font-size: clamp(12px, 2.6vw, 18px);
+  color: rgba(255, 255, 255, 0.45);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.beurs-hud {
+  flex: 0 0 auto;
+  font-family: var(--display);
+  font-size: clamp(18px, 4vw, 30px);
+  color: var(--goud);
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Voortgangsbalk naar de finish ---- */
+
+.voortgang {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 46px);
+  left: 16%;
+  right: 16%;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(10, 30, 50, 0.35);
+}
+
+.voortgang-vulling {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  width: 0%;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* Je beste poging tot nu toe, als een streepje op de balk */
+.voortgang-beste {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--goud);
+  display: none;
+}
+
+.voortgang-finish {
+  position: absolute;
+  right: 0;
+  top: -4px;
+  width: 3px;
+  height: 15px;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+/* ---- De twee raakvlakken ---- */
+
+.vlak {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--onderrand) + 10px);
+  width: 34%;
+  max-width: 320px;
+  height: 32%;
+  min-height: 120px;
+  border-radius: 22px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  touch-action: none;
+  font-weight: 800;
+  font-size: clamp(18px, 3.6vw, 30px);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  transition: background-color 0.08s linear;
+}
+
+.vlak-rem  { left: 12px;  border-color: rgba(224, 87, 76, 0.55);  background: rgba(224, 87, 76, 0.10); }
+.vlak-trap { right: 12px; border-color: rgba(70, 180, 95, 0.55);  background: rgba(70, 180, 95, 0.10); }
+
+/* Terwijl je hem vasthoudt */
+.vlak-rem.aan  { background: rgba(224, 87, 76, 0.30); }
+.vlak-trap.aan { background: rgba(70, 180, 95, 0.30); }
+
+.knop-stoppen {
+  position: absolute;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--onderrand) + 10px);
+  z-index: 2;
+  pointer-events: auto;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 12px;
+  background: var(--nacht);
+  color: var(--room);
+  font-family: var(--tekst);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 46%;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(14, 23, 40, 0.75);
+  color: var(--room);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+
+/* ============================================================
+   De menu's
+   ============================================================ */
+
+.paneel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px
+           calc(env(safe-area-inset-bottom, 0px) + var(--onderrand) + 14px);
+  background: rgba(11, 18, 32, 0.82);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  overflow: hidden;
+}
+
+.kaart {
+  width: 100%;
+  max-width: 460px;
+  max-height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 22px;
+  border-radius: 20px;
+  background: var(--paneel);
+  border: 1px solid var(--lijn);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.kaart-breed { max-width: 620px; text-align: left; }
+
+.kaart-kop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.titel {
+  font-family: var(--display);
+  font-size: clamp(44px, 12vw, 72px);
+  line-height: 1;
+  color: var(--goud);
+  letter-spacing: 0.02em;
+}
+
+.kop {
+  font-family: var(--display);
+  font-size: clamp(22px, 5vw, 30px);
+  line-height: 1.15;
+  color: var(--room);
+}
+
+.ondertitel {
+  margin-top: 6px;
+  color: var(--mist);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.uitleg {
+  margin: 14px 0;
+  color: var(--mist);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.uitleg strong { color: var(--room); }
+.uitleg.klein  { font-size: 13px; }
+
+.spot {
+  margin-top: 4px;
+  color: var(--goud);
+  font-weight: 700;
+  font-style: italic;
+  font-size: 15px;
+}
+
+.tip {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.20);
+  color: var(--mist);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.beurs   { margin-top: 14px; color: var(--mist); font-size: 14px; }
+.beurs b { color: var(--goud); }
+
+.beurs-klein {
+  flex: 0 0 auto;
+  font-family: var(--display);
+  font-size: 20px;
+  color: var(--goud);
+}
+
+.versie { margin-top: 10px; color: rgba(154, 168, 196, 0.5); font-size: 11px; }
+
+
+/* ---- Knoppen ---- */
+
+.knop {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 13px;
+  background: var(--paneel-op);
+  color: var(--room);
+  font-family: var(--tekst);
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.knop:active { transform: translateY(1px); }
+
+.knop-groot {
+  background: var(--goud);
+  color: #23180a;
+  font-size: 19px;
+  padding: 15px 16px;
+}
+
+.knop-stil { background: transparent; border: 1px solid var(--lijn); color: var(--mist); }
+
+.knop:disabled, .knop-stil:disabled { opacity: 0.4; cursor: default; }
+
+.knoppenrij { display: flex; gap: 10px; flex-wrap: wrap; }
+.knoppenrij .knop { flex: 1 1 130px; width: auto; }
+
+
+/* ---- Tabbladen in de garage ---- */
+
+.tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--lijn);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--mist);
+  font-family: var(--tekst);
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.tab-aan { background: var(--paneel-op); color: var(--room); border-color: transparent; }
+
+
+/* ---- Lijsten: onderdelen, fietsen, werelden ---- */
+
+.lijst, .wereldlijst, .rooster {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.rooster { gap: 8px; }
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--lijn);
+}
+
+.item.vol     { opacity: 0.65; }
+.item.op-slot { opacity: 0.55; }
+.item.gekozen { border-color: var(--goud); }
+
+.item-icoon { font-size: 26px; flex: 0 0 auto; }
+
+.item-tekst { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.item-tekst b { font-size: 15.5px; }
+.item-tekst i { font-style: normal; color: var(--mist); font-size: 13px; line-height: 1.35; }
+.item-tekst u { text-decoration: none; color: var(--goud); font-size: 12.5px; font-weight: 700; }
+.item-tekst em.plus { font-style: normal; color: var(--mos);  font-size: 12.5px; }
+.item-tekst em.min  { font-style: normal; color: var(--klei); font-size: 12.5px; }
+
+.bolletjes { color: var(--goud); letter-spacing: 0.08em; font-size: 12px; }
+
+.item-knop { flex: 0 0 auto; }
+.item-knop .knop { margin-top: 0; width: auto; padding: 10px 14px; font-size: 14px; }
+.item-knop .klaar { color: var(--mist); font-weight: 800; font-size: 14px; }
+
+
+/* ---- Wereld- en levelkaarten ---- */
+
+.wereldkaart, .levelkaart {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 13px;
+  border-radius: 13px;
+  border: 1px solid var(--lijn);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--room);
+  font-family: var(--tekst);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wereldkaart.op-slot, .levelkaart.op-slot { opacity: 0.45; cursor: default; }
+.levelkaart.gehaald  { border-color: rgba(70, 180, 95, 0.55); }
+.levelkaart.te-zwaar { border-color: rgba(224, 87, 76, 0.45); }
+
+.levelnr {
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--paneel-op);
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 17px;
+}
+
+.leveltekst, .wereldtekst { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.leveltekst b, .wereldtekst b { font-size: 15.5px; }
+.leveltekst i, .wereldtekst i { font-style: normal; color: var(--mist); font-size: 12.5px; }
+.leveltekst u { text-decoration: none; color: var(--goud); font-size: 12px; font-weight: 700; }
+
+.levelmeters { flex: 0 0 auto; color: var(--mist); font-weight: 800; font-size: 13px; }
+.wereldicoon { font-size: 28px; flex: 0 0 auto; }
+
+
+/* ---- Het buitvak op het eindscherm ---- */
+
+.buit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.22);
+  text-align: left;
+}
+
+.buit span { display: flex; justify-content: space-between; gap: 12px; font-size: 14.5px; }
+.buit i { font-style: normal; color: var(--mist); }
+.buit b { color: var(--room); font-weight: 800; }
+
+.buit .totaal {
+  margin-top: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--lijn);
+  font-size: 16.5px;
+}
+.buit .totaal b { color: var(--goud); }
+
+
+/* ---- Schakelaars ---- */
+
+.schakelrij {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--lijn);
+  text-align: left;
+}
+
+.schakel-tekst { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+.schakel-tekst b { font-size: 15px; }
+.schakel-tekst span { color: var(--mist); font-size: 12.5px; line-height: 1.35; }
+
+.schakelaar {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 30px;
+  border: none;
+  border-radius: 15px;
+  background: var(--nacht-diep);
+  padding: 3px;
+  cursor: pointer;
+}
+
+.schakel-knop {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--mist);
+  transition: transform 0.14s ease, background-color 0.14s ease;
+}
+
+.schakelaar[aria-checked="true"] { background: var(--mos); }
+.schakelaar[aria-checked="true"] .schakel-knop { transform: translateX(22px); background: #ffffff; }
+
+</style>
+
+
+<div class="scherm">
+
+  <!-- Hierop wordt het spel getekend -->
+  <canvas id="canvas"></canvas>
+
+  <!-- Zo min mogelijk over het beeld tijdens het rijden -->
+  <div class="hud verborgen" id="hud">
+
+    <div class="hud-boven">
+      <div class="stamina">
+        <div class="stamina-vulling" id="staminaVulling"></div>
+        <span class="stamina-woord">STAMINA</span>
+      </div>
+      <div class="hud-midden">
+        <span class="afstand" id="hudAfstand">0 m</span>
+        <span class="snelheid" id="hudSnelheid">0 km/h</span>
+      </div>
+      <span class="beurs-hud" id="hudGeld">$0</span>
+    </div>
+
+    <!-- Hoever naar de finish. Het oranje streepje is je beste poging. -->
+    <div class="voortgang">
+      <div class="voortgang-vulling" id="voortgangVulling"></div>
+      <span class="voortgang-beste" id="voortgangBeste"></span>
+      <span class="voortgang-finish"></span>
+    </div>
+
+    <!-- De twee raakvlakken. Vasthouden, niet tikken. -->
+    <div class="vlak vlak-rem" id="vlakRem"><span>BRAKE</span></div>
+    <div class="vlak vlak-trap" id="vlakTrap"><span>PEDAL</span></div>
+
+    <button class="knop-stoppen" id="knopStoppen">QUIT</button>
+  </div>
+
+  <!-- Uitleg aan het begin van een level, verdwijnt bij je eerste aanraking -->
+  <div class="hint verborgen" id="hint">Hold right to pedal · hold left to brake</div>
+
+  <!-- Titelscherm -->
+  <div class="paneel" id="menu">
+    <div class="kaart">
+      <h1 class="titel">PEDAL!</h1>
+      <p class="ondertitel">Nine bikes. One very long hill.</p>
+      <p class="uitleg">
+        Get to the finish before your legs give out.
+        <strong>Hold the right</strong> of the screen to pedal,
+        <strong>the left</strong> to brake.
+        In the air those two lean you back and forward.
+      </p>
+      <button class="knop knop-groot" id="knopSpelen">Ride</button>
+      <div class="knoppenrij">
+        <button class="knop knop-stil" id="knopGarage">Garage</button>
+        <button class="knop knop-stil" id="knopInstellingen">Settings</button>
+      </div>
+      <p class="beurs">You have <b id="beursMenu">$0</b></p>
+      <p class="versie" id="versie">versie van 26 augustus 2026, 13:04</p>
+    </div>
+  </div>
+
+  <!-- Kies een wereld -->
+  <div class="paneel verborgen" id="wereldkiezer">
+    <div class="kaart kaart-breed">
+      <div class="kaart-kop">
+        <h2 class="kop">Where are you riding?</h2>
+        <span class="beurs-klein" id="beursWereld">$0</span>
+      </div>
+      <div class="wereldlijst" id="wereldlijst"></div>
+      <button class="knop knop-stil" id="knopWereldTerug">Back</button>
+    </div>
+  </div>
+
+  <!-- Kies een level binnen die wereld -->
+  <div class="paneel verborgen" id="levelkiezer">
+    <div class="kaart kaart-breed">
+      <div class="kaart-kop">
+        <h2 class="kop" id="levelkiezerKop">Pick a route</h2>
+        <span class="beurs-klein" id="beursLevel">$0</span>
+      </div>
+      <div class="rooster" id="rooster"></div>
+      <div class="knoppenrij">
+        <button class="knop knop-stil" id="knopNaarGarage">Garage</button>
+        <button class="knop knop-stil" id="knopLevelTerug">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Garage: de onderdelen -->
+  <div class="paneel verborgen" id="garage">
+    <div class="kaart kaart-breed">
+      <div class="kaart-kop">
+        <h2 class="kop">Garage</h2>
+        <span class="beurs-klein" id="beursGarage">$0</span>
+      </div>
+      <div class="tabs">
+        <button class="tab tab-aan" id="tabOnderdelen">Parts</button>
+        <button class="tab" id="tabFietsen">Bikes</button>
+      </div>
+      <div class="lijst" id="onderdeellijst"></div>
+      <div class="lijst verborgen" id="fietsenlijst"></div>
+      <button class="knop knop-stil" id="knopGarageTerug">Back</button>
+    </div>
+  </div>
+
+  <!-- Na afloop van een poging -->
+  <div class="paneel verborgen" id="resultaat">
+    <div class="kaart">
+      <h2 class="kop" id="resultaatKop"></h2>
+      <p class="spot" id="resultaatSpot"></p>
+      <p class="uitleg" id="resultaatInfo"></p>
+      <div class="buit" id="resultaatBuit"></div>
+      <p class="tip" id="resultaatTip"></p>
+      <div class="knoppenrij">
+        <button class="knop knop-groot" id="knopVolgende">Next level</button>
+        <button class="knop knop-groot" id="knopOpnieuw">Ride again</button>
+        <button class="knop knop-stil" id="knopNaarGarage2">Garage</button>
+        <button class="knop knop-stil" id="knopTerug">Levels</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instellingen -->
+  <div class="paneel verborgen" id="instellingen">
+    <div class="kaart">
+      <h2 class="kop">Settings</h2>
+      <div class="schakelrij">
+        <div class="schakel-tekst">
+          <b>Sound</b>
+          <span>Coins, landings, and the noise you make when it goes wrong.</span>
+        </div>
+        <button class="schakelaar" id="knopGeluid" role="switch" aria-checked="true">
+          <span class="schakel-knop"></span>
+        </button>
+      </div>
+      <p class="uitleg klein">
+        Your phone&rsquo;s silent switch always wins. If you hear nothing,
+        check that first.
+      </p>
+      <button class="knop knop-stil" id="knopWissen">Erase all progress</button>
+      <button class="knop knop-stil" id="knopInstellingenTerug">Back</button>
+    </div>
+  </div>
+
+  <!-- Pauze -->
+  <div class="paneel verborgen" id="pauze">
+    <div class="kaart">
+      <h2 class="kop">Paused</h2>
+      <div class="knoppenrij">
+        <button class="knop knop-groot" id="knopDoorgaan">Resume</button>
+        <button class="knop knop-stil" id="knopPauzeOpnieuw">Restart</button>
+        <button class="knop knop-stil" id="knopPauzeLevels">Levels</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+/* ---------- js/instellingen.js ---------- */
+/* ============================================================
+   PEDAL!  --  1. ALLE KNOPPEN OP EEN RIJTJE
+
+   Dit bestand bevat geen logica, alleen getallen en de formules
+   die daaruit volgen. Wil je dat het spel anders voelt, dan is
+   dit de plek. Verder nergens.
+
+   Eenheden zijn echt: meters, seconden, meters per seconde.
+   Een kracht is altijd een versnelling (m/s²), want de fiets
+   heeft geen massa in dit spel -- dat scheelt een getal dat
+   toch nergens iets doet.
+
+   Alles wat een upgrade doet staat hieronder als functie van
+   het niveau n. De winkel gebruikt precies dezelfde functies om
+   op te schrijven wat je koopt, dus die tekst kan nooit meer
+   afwijken van wat er echt gebeurt.
+   ============================================================ */
+
+const INST = {
+  /* ---- De wereld ---- */
+  G:            9.81,   // zwaartekracht
+  puntAfstand:  1.1,    // om de hoeveel meter een punt op de baan ligt
+
+  /* ---- Trappen ---- */
+  // Een fietser levert ruwweg constant vermogen: bij lage snelheid
+  // veel kracht, bij hoge snelheid weinig. Dat is precies waarom
+  // een fiets snel optrekt maar niet eindeloos doorversnelt.
+  vermogenBasis: 3.20,  // m²/s³, zonder aandrijving-upgrade
+  vermogenStap:  0.66,
+  krachtPlafond: 1.15,  // maximale kracht = vermogen x dit
+  traagLimiet:   0.9,   // onder deze snelheid rekenen we niet verder terug
+
+  /* ---- Weerstand ---- */
+  luchtBasis:  0.0220,  // luchtweerstand zonder frame-upgrade
+  luchtStap:   0.130,   // elk frame-niveau haalt dit deel eraf
+  luchtMin:    0.22,    // hoeveel er minimaal van overblijft
+  rolAsfalt:   0.28,    // rolweerstand op een gewone weg
+
+  // Wat losse en ruwe ondergrond er bovenop doet. Banden halen het
+  // eerste rijtje omlaag, vering het tweede.
+  rolLos: { grind: 0.40, modder: 1.20, zand: 1.75, gras: 0.45 },
+  rolRuw: { hobbels: 0.95, keien: 0.65 },
+
+  remkracht:  6.0,      // m/s² zolang je de rem vasthoudt
+  minSnelheid: 0.0,
+
+  /* ---- In de lucht ---- */
+  draaikracht:  5.2,    // hoe snel je kantelt terwijl je vliegt (rad/s²)
+  draaiRem:     2.1,    // demping, anders tol je door
+  maxDraai:     4.6,    // rad/s
+  landingsverlies: 0.55,// hoeveel snelheid een scheve landing kost (maximaal)
+  grondVolgen:  9.0,    // hoe snel de fiets op de grond de helling volgt
+
+  /* ---- Stamina ---- */
+  // De klok van het spel. Vlak fietsen kost bijna niets, klimmen
+  // kost alles: `inspanning` is hoe dicht je tegen je maximale
+  // kracht aan zit, en dat is precies wat een heuvel met je doet.
+  // Let op de maat van deze twee. Onderdelen mogen je een heel eind
+  // brengen, maar ze mogen een slechte fiets nooit goedmaken --
+  // anders koop je nooit een betere en is de halve garage decor.
+  staminaBasis:   100,
+  staminaStap:     11,  // per niveau Legs
+  kostenPerSec:  2.00,  // bij volle inspanning
+  kostenVloer:   0.50,  // dit deel betaal je ook als je licht trapt
+
+  // Herstel is expres een *deel van je eigen verbruik* en geen los
+  // getal. Anders krijg je een fiets waarbij uitrollen precies
+  // evenveel oplevert als trappen kost, en dan is je bereik
+  // ineens oneindig -- dat is precies wat hier eerst gebeurde.
+  herstelDeel:   0.12,  // uitrollen geeft dit deel terug
+  herstelBergaf: 1.20,  // en bergaf tot zoveel keer zoveel
+
+  /* ---- Geld ---- */
+  geldPerMeter:  0.60,
+  muntWaarde:       4,
+  eersteKeerMaal: 3.0,  // de bonus de eerste keer dat je een level haalt
+
+  /* ---- Beeld ---- */
+  pixelsPerMeter: 26,   // zoomniveau; wordt bijgesteld naar schermhoogte
+  camVoor:      0.34,   // hoever de fiets links van het midden zit (0..1)
+  camVolgen:     4.5,   // hoe snel de camera de fiets achterna komt
+};
+
+
+/* ============================================================
+   Wat een upgradeniveau precies doet
+
+   Elke functie neemt het niveau n en geeft de waarde. n = 0 is
+   kaal. Het maximum is de lengte van het prijzenrijtje in
+   onderdelen.js; niets hieronder weet daarvan, en dat hoeft ook
+   niet -- de waarden lopen gewoon door.
+   ============================================================ */
+
+/* Frame -- minder luchtweerstand, dus een hogere topsnelheid */
+function luchtBij(n) {
+  return INST.luchtBasis * Math.max(INST.luchtMin, 1 - n * INST.luchtStap);
+}
+
+/* Drivetrain -- meer vermogen, dus sneller op snelheid en meer duw bergop */
+function vermogenBij(n) {
+  return INST.vermogenBasis + n * INST.vermogenStap;
+}
+
+/* Gears -- een lichtere verzet, dus de helling trekt minder aan je */
+function klimHulpBij(n) {
+  return Math.max(0.42, 1 - n * 0.120);
+}
+
+/* Tyres -- profiel op grind, modder en zand. En grip in een looping. */
+function gripBij(n) {
+  return Math.max(0.34, 1 - n * 0.140);
+}
+
+/* Suspension -- hobbels remmen minder */
+function dempingBij(n) {
+  return Math.max(0.30, 1 - n * 0.150);
+}
+
+/* Suspension -- en je mag schever landen zonder te kukelen (radialen) */
+function landingsraamBij(n) {
+  return 0.30 + n * 0.095;
+}
+
+/* Legs -- de grootte van je stamina-balk */
+function staminaMaxBij(n) {
+  return INST.staminaBasis + n * INST.staminaStap;
+}
+
+/* Lungs -- hoe hard de balk leegloopt */
+function kostenBij(n) {
+  return Math.max(0.78, 1 - n * 0.042);
+}
+
+/* Lungs -- en welk deel van je verbruik je terugkrijgt als je uitrolt */
+function herstelDeelBij(n) {
+  return INST.herstelDeel * (1 + n * 0.10);
+}
+
+/* Panniers -- munten zijn meer waard en je grijpt ze van verder */
+function muntMaalBij(n)   { return 1 + n * 0.30; }
+function muntBereikBij(n) { return 1.4 + n * 0.55; }
+
+
+/* ============================================================
+   De topsnelheid volgt uit de rest
+
+   We tikken hem niet in: hij is de snelheid waarbij je vermogen
+   precies opgaat aan rol- en luchtweerstand. Daardoor klopt het
+   getal in de garage altijd met wat de fiets echt doet, ook als
+   je een rare combinatie van onderdelen hebt.
+
+   Oplossen van  vermogen / v = rol + lucht * v²  gaat het
+   makkelijkst door hem gewoon dicht te knijpen.
+   ============================================================ */
+function topSnelheidVan(vermogen, lucht, rol) {
+  let laag = 0.5, hoog = 40;
+  for (let i = 0; i < 40; i++) {
+    const v = (laag + hoog) / 2;
+    // duw > weerstand betekent dat je nog harder kunt
+    if (vermogen / v > rol + lucht * v * v) laag = v; else hoog = v;
+  }
+  return laag;
+}
+
+/* In km/h, want dat is wat er op het scherm staat */
+function kmh(v) { return v * 3.6; }
+
+/* ---------- js/onderdelen.js ---------- */
+/* ============================================================
+   PEDAL!  --  2. DE ONDERDELEN
+
+   Acht dingen die je aan je fiets kunt verbeteren. Elk onderdeel
+   is puur data: een rijtje prijzen en een zinnetje dat vertelt
+   wat je ervoor terugkrijgt.
+
+   Het maximumniveau tikken we nergens in -- dat is gewoon de
+   lengte van het prijzenrijtje (zie onderaan). Een niveau
+   erbij of eraf is dus een getal toevoegen, meer niet.
+
+   `beschrijf(n)` rekent met een echte spec, dezelfde die de
+   natuurkunde gebruikt. Er is geen tweede lijstje met effecten
+   dat uit de pas kan gaan lopen.
+   ============================================================ */
+
+const ONDERDELEN = [
+  {
+    sleutel: 'frame',
+    naam: 'Frame',
+    icoon: '🚲',
+    uitleg: 'Lighter and lower. Less wind means a higher top speed.',
+    prijzen: [350, 850, 1900, 4000, 8500, 17000],
+    beschrijf: (n) => kmh(specMet('frame', n).topV).toFixed(1) + ' km/h',
+  },
+  {
+    sleutel: 'aandrijving',
+    naam: 'Drivetrain',
+    icoon: '⛓️',
+    uitleg: 'Better crank and chain. More push, so you get going faster.',
+    prijzen: [300, 750, 1700, 3600, 7500],
+    beschrijf: (n) => specMet('aandrijving', n).maxKracht.toFixed(1) + ' m/s² off the line',
+  },
+  {
+    sleutel: 'versnellingen',
+    naam: 'Gears',
+    icoon: '⚙️',
+    uitleg: 'More cogs, so a climb pulls back at you far less.',
+    prijzen: [320, 800, 1800, 3800, 8000],
+    beschrijf: (n) => Math.round((1 - klimHulpBij(n)) * 100) + '% less pull uphill',
+  },
+  {
+    sleutel: 'banden',
+    naam: 'Tyres',
+    icoon: '🛞',
+    uitleg: 'Tread for gravel, mud and sand. Bald tyres just sink in.',
+    prijzen: [280, 700, 1600, 3400, 7000],
+    beschrijf: (n) => Math.round((1 - gripBij(n)) * 100) + '% less drag on loose ground',
+  },
+  {
+    sleutel: 'vering',
+    naam: 'Suspension',
+    icoon: '🔩',
+    uitleg: 'Swallows roots and cobbles, and lets you land a lot more crooked.',
+    prijzen: [300, 720, 1650, 3500, 7200],
+    beschrijf: (n) => 'landing within ' + Math.round(landingsraamBij(n) * 180 / Math.PI) + '°',
+  },
+  {
+    sleutel: 'benen',
+    naam: 'Legs',
+    icoon: '🦵',
+    uitleg: 'Winter training. A bigger stamina bar, so you simply last longer.',
+    prijzen: [260, 650, 1450, 3000, 6200, 12500],
+    beschrijf: (n) => Math.round(staminaMaxBij(n)) + ' stamina',
+  },
+  {
+    sleutel: 'longen',
+    naam: 'Lungs',
+    icoon: '🫁',
+    uitleg: 'You breathe more calmly. The bar empties slower and fills back up quicker.',
+    prijzen: [320, 780, 1750, 3700, 7800],
+    beschrijf: (n) => Math.round((1 - kostenBij(n)) * 100) + '% slower drain',
+  },
+  {
+    sleutel: 'tassen',
+    naam: 'Panniers',
+    icoon: '🎒',
+    uitleg: 'Room for the loot. Coins are worth more and you grab them from further off.',
+    // Het enige onderdeel dat niets aan de natuurkunde verandert: het
+    // maakt je rijker, niet sneller. test-baan.js slaat hem daarom
+    // over bij de vraag of elk onderdeel ergens een level openbreekt.
+    alleenGeld: true,
+    prijzen: [260, 620, 1400, 2900, 6000],
+    beschrijf: (n) => '+' + Math.round((muntMaalBij(n) - 1) * 100) + '% per coin',
+  },
+];
+
+/* Het maximum is de lengte van het rijtje. Nergens een tweede getal. */
+ONDERDELEN.forEach((u) => { u.max = u.prijzen.length; });
+
+function onderdeelMet(sleutel) {
+  return ONDERDELEN.find((u) => u.sleutel === sleutel);
+}
+
+/* Wat het volgende niveau kost. `null` betekent: hij is vol. */
+function upgradePrijs(onderdeel, huidigNiveau) {
+  if (huidigNiveau >= onderdeel.max) return null;
+  return onderdeel.prijzen[huidigNiveau];
+}
+
+/* ---------- js/fietsen.js ---------- */
+/* ============================================================
+   PEDAL!  --  3. DE FIETSEN
+
+   Negen stuks, van een roestbak tot een speed pedelec. Ze delen
+   allemaal dezelfde onderdelen; een fiets is niets meer dan een
+   setje vermenigvuldigers bovenop wat je gekocht hebt.
+
+   LET OP welke kant op beter is. Bij vier van de negen is
+   LAGER beter, want het zijn vermenigvuldigers op weerstand en
+   op kosten:
+
+       lucht    laag = minder luchtweerstand   = sneller
+       grip     laag = minder last van zand    = beter
+       demping  laag = minder last van hobbels = beter
+       stamina  laag = de balk loopt langzamer leeg
+
+   En bij de rest is hoger beter: vermogen, klim, draai, landing,
+   remmen, geld.
+
+   `gave` is expres onvolledig; wat je weglaat wordt aangevuld
+   uit STANDAARD_GAVE, zodat er nooit ergens `undefined` in de
+   natuurkunde belandt.
+   ============================================================ */
+
+const STANDAARD_GAVE = {
+  vermogen: 1,   // hoger = meer duw
+  lucht:    1,   // lager  = sneller
+  klim:     1,   // hoger  = makkelijker bergop
+  grip:     1,   // lager  = beter op los terrein
+  demping:  1,   // lager  = beter op hobbels
+  stamina:  1,   // lager  = balk loopt langzamer leeg
+  draai:    1,   // hoger  = sneller kantelen in de lucht
+  landing:  1,   // hoger  = ruimer landingsraam
+  remmen:   1,   // hoger  = sterkere remmen
+  geld:     1,   // hoger  = meer waard per munt
+};
+
+const FIETSEN = [
+  {
+    sleutel: 'roestbak',
+    naam: 'Rust bucket',
+    icoon: '🚲',
+    prijs: 0,
+    kleur: '#7a8794', kleurTwee: '#3b444e', shirt: '#c8553d', huid: '#e8b48c',
+    korte: 'It was in the shed. One brake works. Probably.',
+    gave: { vermogen: 0.85, lucht: 1.22, klim: 0.85, grip: 1.30, demping: 1.35,
+            stamina: 1.05, remmen: 0.70 },
+    plus: [],
+    min:  ['Slow', 'Tires you out fast', 'Rattles over everything', 'Brakes are a suggestion'],
+  },
+  {
+    sleutel: 'stadsfiets',
+    naam: 'City bike',
+    icoon: '🛍️',
+    prijs: 1200,
+    kleur: '#3f7f9e', kleurTwee: '#22323d', shirt: '#e0574c', huid: '#e8b48c',
+    korte: 'Grandma’s bike. Heavy, upright, and it always works.',
+    gave: { stamina: 1.00 },
+    plus: ['Bad at nothing'],
+    min:  [],
+  },
+  {
+    sleutel: 'mountainbike',
+    naam: 'Mountain bike',
+    icoon: '🚵',
+    prijs: 5500,
+    kleur: '#5a8f4a', kleurTwee: '#2a3a24', shirt: '#e8a13a', huid: '#d8a878',
+    korte: 'Knobbly tyres and long travel. Mud means nothing to it.',
+    gave: { grip: 0.55, demping: 0.50, lucht: 1.08, vermogen: 1.02, stamina: 0.94, landing: 1.20 },
+    plus: ['Grips on anything loose', 'Barely feels roots'],
+    min:  ['Catches a lot of wind'],
+  },
+  {
+    sleutel: 'bmx',
+    naam: 'BMX',
+    icoon: '🛹',
+    prijs: 12000,
+    kleur: '#d0433f', kleurTwee: '#2a1c1c', shirt: '#2f9e8f', huid: '#c98a5e',
+    korte: 'Tiny, nimble, and it turns in the air like nothing else.',
+    gave: { draai: 1.70, landing: 1.55, vermogen: 1.00, lucht: 1.18, klim: 0.90, stamina: 0.90 },
+    plus: ['Spins in the air', 'Lands almost anything'],
+    min:  ['Low top speed', 'Poor climber'],
+  },
+  {
+    sleutel: 'bakfiets',
+    naam: 'Cargo bike',
+    icoon: '📦',
+    prijs: 20000,
+    kleur: '#c8a04a', kleurTwee: '#3a2e1c', shirt: '#4a6fa5', huid: '#e8b48c',
+    korte: 'That box holds an unbelievable amount. Fast it is not.',
+    gave: { geld: 2.60, vermogen: 1.15, lucht: 1.30, klim: 0.75, draai: 0.55,
+            landing: 0.80, stamina: 0.97 },
+    plus: ['More than double the money'],
+    min:  ['Heavy uphill', 'Steers like a barge in the air'],
+  },
+  {
+    sleutel: 'racefiets',
+    naam: 'Road bike',
+    icoon: '🏆',
+    prijs: 34000,
+    kleur: '#f0c04a', kleurTwee: '#2a2418', shirt: '#1f3b73', huid: '#e8b48c',
+    korte: 'So light you lift it with a finger. So thin you feel every stone.',
+    gave: { lucht: 0.62, vermogen: 1.25, klim: 1.30, grip: 1.50, demping: 1.60,
+            landing: 0.70, stamina: 0.82 },
+    plus: ['Cuts straight through the wind', 'Excellent climber'],
+    min:  ['Every root feels like a wall', 'No grip on sand'],
+  },
+  {
+    sleutel: 'fatbike',
+    naam: 'Fat bike',
+    icoon: '🛞',
+    prijs: 52000,
+    kleur: '#8a4fd0', kleurTwee: '#241a33', shirt: '#f0c04a', huid: '#c98a5e',
+    korte: 'Tyres like barrels. Sand, mud, cobbles — it does not care.',
+    gave: { grip: 0.30, demping: 0.45, lucht: 1.20, vermogen: 1.30, stamina: 0.78, landing: 1.35 },
+    plus: ['Rides over literally anything', 'Forgiving landings'],
+    min:  ['Catches a lot of wind'],
+  },
+  {
+    sleutel: 'ebike',
+    naam: 'E-bike',
+    icoon: '🔋',
+    prijs: 78000,
+    kleur: '#4a4f8a', kleurTwee: '#1e2033', shirt: '#d8d8d8', huid: '#d8a878',
+    korte: 'The motor pedals along. Your legs barely notice the hill.',
+    gave: { stamina: 0.58, klim: 1.90, vermogen: 1.45, lucht: 0.95, geld: 0.85, demping: 0.90 },
+    plus: ['Stamina lasts more than twice as long', 'Climbs like it is flat'],
+    min:  ['15% less money'],
+  },
+  {
+    sleutel: 'pedelec',
+    naam: 'Speed pedelec',
+    icoon: '⚡',
+    prijs: 130000,
+    kleur: '#e8573f', kleurTwee: '#2b1410', shirt: '#12141f', huid: '#e8b48c',
+    korte: 'Legally a moped. Nobody at the club will talk to you again.',
+    gave: { vermogen: 2.05, lucht: 0.55, stamina: 0.66, klim: 1.80, grip: 1.25, geld: 0.90 },
+    plus: ['By far the fastest thing here', 'Hardly tires you out'],
+    min:  ['Skittish on loose ground'],
+  },
+];
+
+/* Vult de gaten in `gave` op, zodat de natuurkunde nooit hoeft te
+   controleren of iets bestaat. */
+function gaveVan(fiets) {
+  return Object.assign({}, STANDAARD_GAVE, (fiets && fiets.gave) || {});
+}
+
+function fietsMet(sleutel) {
+  return FIETSEN.find((f) => f.sleutel === sleutel) || FIETSEN[0];
+}
+
+/* ---------- js/baan.js ---------- */
+/* ============================================================
+   PEDAL!  --  4. DE BAAN
+
+   De hele wereld is één lijn: een rij punten van links naar
+   rechts. De fiets rijdt niet op x, maar op `s` -- de afstand
+   langs die lijn. Dat klinkt omslachtig, maar het levert alles
+   in één klap op:
+
+     - een helling is gewoon de hoek van de lijn,
+     - een schans is een knik naar beneden waar je vanaf vliegt,
+     - en een looping is straks een stuk lijn dat over zichzelf
+       heen buigt. Daar hoeft de natuurkunde niets van te weten.
+
+   Elk punt weet ook op wat voor ondergrond het ligt. Asfalt,
+   zand en modder verschillen alleen in rolweerstand, en dat is
+   precies genoeg om ze totaal anders te laten voelen.
+
+   De baan wordt gebouwd met een gezaaide toevalsgenerator, dus
+   hetzelfde level ziet er elke poging identiek uit. Dat is
+   expres: je moet een level kunnen leren.
+   ============================================================ */
+
+
+/* ---- Toeval dat je kunt herhalen (mulberry32) ---- */
+function maakRnd(zaad) {
+  let a = zaad >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+
+/* ============================================================
+   De bouwer
+
+   Houdt bij waar hij is en plakt er stukken achter. Alle
+   stukken hieronder praten alleen via deze paar methodes met
+   het pad, zodat er nooit een half punt in belandt.
+   ============================================================ */
+function maakBouwer(zaad) {
+  return {
+    pt: [{ x: 0, y: 0, soort: 'asfalt' }],
+    munten: [],
+    rnd: maakRnd(zaad),
+
+    eind() { return this.pt[this.pt.length - 1]; },
+    x() { return this.eind().x; },
+    y() { return this.eind().y; },
+
+    heel(a, b) { return a + Math.floor(this.rnd() * (b - a + 1)); },
+    tussen(a, b) { return a + this.rnd() * (b - a); },
+    kies(lijst) { return lijst[Math.floor(this.rnd() * lijst.length)]; },
+
+    /* Het enige wat echt punten toevoegt. `vorm(t)` geeft de hoogte
+       ten opzichte van waar we begonnen, met t van 0 tot 1. */
+    strek(lengte, soort, vorm) {
+      const x0 = this.x(), y0 = this.y();
+      const stappen = Math.max(1, Math.round(lengte / INST.puntAfstand));
+      for (let i = 1; i <= stappen; i++) {
+        const t = i / stappen;
+        this.pt.push({ x: x0 + lengte * t, y: y0 + (vorm ? vorm(t) : 0), soort: soort });
+      }
+    },
+
+    /* Een harde knik. Hier vlieg je vanaf als je hard genoeg gaat. */
+    knik(dx, dy, soort) {
+      this.pt.push({ x: this.x() + dx, y: this.y() + dy, soort: soort });
+    },
+
+    /* De hoogte van de baan op een x die we net gebouwd hebben */
+    hoogteBij(x) {
+      const p = this.pt;
+      for (let i = p.length - 1; i > 0; i--) {
+        if (p[i - 1].x <= x && x <= p[i].x) {
+          const d = p[i].x - p[i - 1].x;
+          const f = d < 1e-6 ? 0 : (x - p[i - 1].x) / d;
+          return p[i - 1].y + (p[i].y - p[i - 1].y) * f;
+        }
+      }
+      return p[p.length - 1].y;
+    },
+
+    /* Munten die de grond volgen -- de veilige, saaie route */
+    muntenLangs(vanX, totX, aantal, hoog) {
+      const h = hoog === undefined ? 1.5 : hoog;
+      for (let i = 0; i < aantal; i++) {
+        const x = vanX + ((totX - vanX) * (i + 0.5)) / aantal;
+        this.munten.push({ x: x, y: this.hoogteBij(x) + h, weg: false });
+      }
+    },
+
+    /* Munten in een boog door de lucht -- die pak je alleen als je springt */
+    muntenBoog(vanX, breedte, aantal, top) {
+      const y0 = this.hoogteBij(vanX);
+      for (let i = 0; i < aantal; i++) {
+        const t = (i + 0.5) / aantal;
+        this.munten.push({
+          x: vanX + breedte * t,
+          y: y0 + 1.4 + top * Math.sin(Math.PI * t),
+          weg: false,
+        });
+      }
+    },
+  };
+}
+
+
+/* ============================================================
+   De stukken
+
+   Elk stuk is een functie (b, zwaar) die de baan verlengt.
+   `zwaar` loopt van 0 tot 1 en is de moeilijkheid van het level:
+   hoe hoger, hoe steiler, langer en gemener.
+
+   Een stuk mag nooit een sprong in de hoogte maken zonder dat
+   expres te bedoelen -- `strek` begint altijd waar het vorige
+   ophield, dus dat gaat vanzelf goed.
+   ============================================================ */
+
+/* Een bult die begint en eindigt met een vlakke raaklijn. Zo
+   sluiten stukken altijd netjes op elkaar aan. */
+function bult(hoogte) {
+  return (t) => hoogte * 0.5 * (1 - Math.cos(2 * Math.PI * t));
+}
+
+/* Een trap omhoog of omlaag die aan beide kanten vlak uitloopt */
+function trede(hoogte) {
+  return (t) => hoogte * t * t * (3 - 2 * t);
+}
+
+const STUKKEN = {
+
+  /* Even niets. Ademruimte, en de plek waar je stamina bijkomt. */
+  vlak(b, zwaar) {
+    const lengte = b.tussen(24, 46);
+    const x0 = b.x();
+    b.strek(lengte, 'asfalt', null);
+    if (b.rnd() < 0.6) b.muntenLangs(x0 + 6, x0 + lengte - 6, b.heel(4, 7), 1.5);
+  },
+
+  /* Golvend land. De basis van bijna elk level. */
+  heuvels(b, zwaar) {
+    const aantal = b.heel(2, 4);
+    for (let i = 0; i < aantal; i++) {
+      const breedte = b.tussen(30, 52);
+      const hoogte = b.tussen(1.0, 2.2) * (0.7 + zwaar * 0.9);
+      const x0 = b.x();
+      b.strek(breedte, 'asfalt', bult(hoogte));
+      if (b.rnd() < 0.55) b.muntenLangs(x0 + breedte * 0.25, x0 + breedte * 0.75, 5, 1.7);
+    }
+  },
+
+  /* Klimmen. Dit is wat je stamina opeet. */
+  klim(b, zwaar) {
+    const lengte = b.tussen(55, 95);
+    const hoogte = lengte * b.tussen(0.055, 0.105) * (0.75 + zwaar * 0.75);
+    const x0 = b.x();
+    b.strek(lengte, b.rnd() < 0.3 ? 'grind' : 'asfalt', trede(hoogte));
+    b.muntenLangs(x0 + 8, x0 + lengte - 8, b.heel(5, 9), 1.6);
+  },
+
+  /* En de beloning erna. Hier haal je snelheid voor wat komt. */
+  afdaling(b, zwaar) {
+    const lengte = b.tussen(45, 85);
+    const hoogte = -lengte * b.tussen(0.06, 0.12) * (0.75 + zwaar * 0.75);
+    const x0 = b.x();
+    b.strek(lengte, 'asfalt', trede(hoogte));
+    b.muntenLangs(x0 + 6, x0 + lengte - 6, b.heel(6, 10), 1.6);
+  },
+
+  /* Een schans, gebouwd zoals ze in het echt gebouwd worden.
+
+     De kicker loopt steeds steiler op, dus bij de lip is de knik
+     naar beneden groot genoeg om je eraf te laten vliegen -- als
+     je hard genoeg gaat. Ga je te langzaam, dan rol je er gewoon
+     overheen.
+
+     En dan het belangrijkste: de landing begint precies even
+     steil als de lip en vlakt daarna uit. Daardoor komt de grond
+     je tegemoet onder ongeveer de hoek waaronder je vliegt, en
+     is landen een kwestie van je fiets rechtzetten in plaats van
+     gokken. Een rechte klif zou hier altijd een crash zijn. */
+  schans(b, zwaar) {
+    b.strek(b.tussen(14, 24), 'asfalt', null);
+
+    const steil = 0.16 + zwaar * 0.34;          // de helling bij de lip
+    const breed = b.tussen(10, 15);
+    const hoog = (steil * breed) / 2;           // want y = hoog·t² loopt bij t=1 op met 2·hoog/breed
+    const lipX = b.x() + breed;
+    b.strek(breed, 'hout', (t) => hoog * t * t);
+
+    b.muntenBoog(lipX, b.tussen(18, 30), b.heel(5, 8), b.tussen(2.0, 4.0));
+
+    // De landing: begint met dezelfde helling als de lip en wordt
+    // steeds vlakker. Hoe verder je springt, hoe zachter je landt.
+    const val = hoog + b.tussen(0.4, 1.2) + zwaar * 1.6;
+    const daal = (2 * val) / steil;
+    b.strek(daal, 'gras', (t) => -val * t * (2 - t));
+
+    // En rustig terug naar het niveau waar we begonnen
+    const terug = val - hoog;
+    b.strek(Math.max(18, terug * 9), 'asfalt', trede(terug));
+  },
+
+  /* Wortels, keien, spoorbielzen. Vering of tandvullingen. */
+  hobbels(b, zwaar) {
+    const lengte = b.tussen(30, 55);
+    const golf = b.tussen(2.6, 3.6);
+    const amp = 0.022 + zwaar * 0.020;
+    const x0 = b.x();
+    b.strek(lengte, b.rnd() < 0.5 ? 'hobbels' : 'keien',
+      (t) => amp * Math.sin((2 * Math.PI * lengte * t) / golf));
+    b.muntenLangs(x0 + 4, x0 + lengte - 4, b.heel(4, 8), 1.5);
+  },
+
+  /* Modder. Je zakt weg, tenzij je banden hebt. */
+  modder(b, zwaar) {
+    const lengte = b.tussen(34, 62) * (0.8 + zwaar * 0.7);
+    const x0 = b.x();
+    b.strek(lengte, 'modder', bult(b.tussen(-0.5, 0.5)));
+    b.muntenLangs(x0 + 4, x0 + lengte - 4, b.heel(5, 8), 1.5);
+  },
+
+  /* Zand. Modder, maar erger. */
+  zand(b, zwaar) {
+    const lengte = b.tussen(30, 55) * (0.8 + zwaar * 0.7);
+    const x0 = b.x();
+    b.strek(lengte, 'zand', bult(b.tussen(0.3, 1.1)));
+    b.muntenLangs(x0 + 3, x0 + lengte - 3, b.heel(4, 7), 1.5);
+  },
+
+  /* Twee schansen kort achter elkaar. Je moet de eerste landing
+     al gebruiken om de tweede te halen. */
+  dubbelschans(b, zwaar) {
+    STUKKEN.schans(b, zwaar);
+    b.strek(b.tussen(8, 14), 'asfalt', null);
+    STUKKEN.schans(b, Math.min(1, zwaar + 0.15));
+  },
+
+  /* Een korte, valse steilte. Kort maar echt steil. */
+  steilte(b, zwaar) {
+    const lengte = b.tussen(18, 30);
+    const hoogte = lengte * b.tussen(0.14, 0.22) * (0.7 + zwaar * 0.6);
+    b.strek(lengte, b.rnd() < 0.4 ? 'grind' : 'asfalt', trede(hoogte));
+    b.strek(b.tussen(10, 18), 'asfalt', null);
+    b.strek(lengte * 0.9, 'asfalt', trede(-hoogte * 0.85));
+  },
+};
+
+
+/* ============================================================
+   Een level omzetten in een pad
+
+   Na het bouwen rekenen we per punt de booglengte, de hoek en
+   de kromming uit. Die drie zijn alles wat de natuurkunde nodig
+   heeft, en ze veranderen nooit meer -- dus één keer uitrekenen
+   en klaar.
+   ============================================================ */
+function voltooiPad(b, level) {
+  const pt = b.pt;
+  const n = pt.length;
+  const s = new Float64Array(n);
+  const hoek = new Float64Array(n);
+  const kromming = new Float64Array(n);
+
+  for (let i = 1; i < n; i++) {
+    const dx = pt[i].x - pt[i - 1].x;
+    const dy = pt[i].y - pt[i - 1].y;
+    s[i] = s[i - 1] + Math.hypot(dx, dy);
+    hoek[i - 1] = Math.atan2(dy, dx);
+  }
+  hoek[n - 1] = hoek[n - 2] || 0;
+
+  // Kromming is hoe hard de hoek verandert per meter baan. Negatief
+  // is bol (een top of een schanslip), positief is hol (een dal).
+  for (let i = 1; i < n - 1; i++) {
+    const ds = (s[i + 1] - s[i - 1]) * 0.5;
+    kromming[i] = ds < 1e-6 ? 0 : (hoek[i] - hoek[i - 1]) / ds;
+  }
+
+  return {
+    pt: pt,
+    s: s,
+    hoek: hoek,
+    kromming: kromming,
+    lengte: s[n - 1],
+    // Op x gesorteerd, zodat het oprapen een schuivend venstertje
+    // kan zijn in plaats van elke frame de hele lijst langs.
+    munten: b.munten.sort((p, q) => p.x - q.x),
+    finishX: level.lengte,
+  };
+}
+
+/* Bouwt het pad van een level, en onthoudt het. Levels worden vaak
+   opnieuw gestart en de simulatie draait er tientallen keren
+   overheen -- dat hoeft maar één keer echt. */
+function padVan(level) {
+  if (level._pad) return level._pad;
+
+  const b = maakBouwer(level.zaad);
+  b.strek(34, 'asfalt', null);              // rustige aanloop, nooit een verrassing
+
+  let vorig = '';
+  let rem = 0;
+  while (b.x() < level.lengte - 30 && rem++ < 400) {
+    let naam = b.kies(level.stukken);
+    if (naam === vorig && level.stukken.length > 1) naam = b.kies(level.stukken);
+    vorig = naam;
+    STUKKEN[naam](b, level.zwaar);
+    b.strek(b.tussen(8, 16), 'asfalt', null);   // adempauze tussen de stukken
+  }
+
+  b.strek(70, 'asfalt', null);              // uitloop voorbij de finish
+
+  level._pad = voltooiPad(b, level);
+  return level._pad;
+}
+
+
+/* ============================================================
+   Opzoeken waar je bent
+
+   `s` loopt bijna altijd vooruit, dus we geven een hint mee van
+   waar we vorige keer zaten. Dan is dit een paar stappen in
+   plaats van een zoektocht door duizenden punten.
+   ============================================================ */
+function indexBij(pad, s, hint) {
+  const arr = pad.s;
+  let i = hint || 0;
+  if (i < 0) i = 0;
+  if (i > arr.length - 2) i = arr.length - 2;
+
+  while (i < arr.length - 2 && arr[i + 1] < s) i++;
+  while (i > 0 && arr[i] > s) i--;
+  return i;
+}
+
+/* Alles wat je op plek `s` over de baan wilt weten */
+function puntBij(pad, s, hint) {
+  const i = indexBij(pad, s, hint);
+  const a = pad.pt[i], bb = pad.pt[i + 1];
+  const ds = pad.s[i + 1] - pad.s[i];
+  const f = ds < 1e-6 ? 0 : Math.max(0, Math.min(1, (s - pad.s[i]) / ds));
+  return {
+    i: i,
+    x: a.x + (bb.x - a.x) * f,
+    y: a.y + (bb.y - a.y) * f,
+    hoek: pad.hoek[i],
+    kromming: pad.kromming[i],
+    soort: a.soort,
+  };
+}
+
+/* ---------- js/werelden.js ---------- */
+/* ============================================================
+   PEDAL!  --  5. DE WERELDEN
+
+   Zes werelden van tien levels. Een wereld is bijna helemaal
+   data: een setje kleuren, wat voor decor er langs de weg staat,
+   en welke stukken er in de baan mogen voorkomen.
+
+   De tien levels tikken we niet los in. `maakLevels` neemt een
+   rijtje namen en laat lengte, drukte en bonus er netjes
+   doorheen oplopen. Een wereld is daardoor een stuk of vijftien
+   regels, en er kan geen level tussen zitten dat per ongeluk
+   makkelijker is dan het vorige.
+   ============================================================ */
+
+/* `stukken` mag twee vormen hebben:
+
+     - één rijtje namen: elk level van de wereld gebruikt hetzelfde,
+     - een rijtje rijtjes: level 1 krijgt het eerste, level 2 het
+       tweede, en zodra de lijst op is blijft het laatste gelden.
+
+   Dat tweede is er voor het begin van een wereld. Je allereerste
+   level hoort vlak te zijn -- daar leer je de twee knoppen, niet
+   de schansen. */
+function stukkenVoor(stukken, i) {
+  if (!Array.isArray(stukken[0])) return stukken;
+  return stukken[Math.min(i, stukken.length - 1)];
+}
+
+function maakLevels(namen, zaadBasis, vanLengte, totLengte,
+                    vanZwaar, totZwaar, vanBonus, totBonus, stukken) {
+  const laatste = namen.length - 1;
+  return namen.map((naam, i) => {
+    const f = laatste === 0 ? 0 : i / laatste;
+    return {
+      naam: naam,
+      lengte: Math.round(vanLengte + (totLengte - vanLengte) * f),
+      zwaar: +(vanZwaar + (totZwaar - vanZwaar) * f).toFixed(2),
+      zaad: zaadBasis + i * 7,
+      bonus: Math.round(vanBonus + (totBonus - vanBonus) * f),
+      stukken: stukkenVoor(stukken, i),
+    };
+  });
+}
+
+const WERELDEN = [
+  {
+    sleutel: 'polder',
+    naam: 'The polder',
+    ondertitel: 'Flat, green, and always a headwind',
+    icoon: '🌷',
+    decor: 'molens',
+    kleuren: {
+      luchtBoven: '#4fa8dc', luchtOnder: '#bfe4f2', zon: '#f6f0b0',
+      verte: '#9fd0a4', verteTwee: '#7cbf88',
+      gras: '#4fb15a', grasDiep: '#3d8f47', aarde: '#7a5f3e',
+      decor: '#f4f4f0', decorTwee: '#8a6a48', accent: '#e8573f',
+    },
+    levels: maakLevels(
+      ['The first stretch', 'Along the ditch', 'Past the farm', 'The little bridge',
+       'Cobbled dyke', 'Between the mills', 'The polder road', 'The long straight',
+       'Headwind', 'Home before dark'],
+      1101, 220, 1000, 0.12, 0.50, 500, 1600,
+      // De polder bouwt zichzelf op: eerst kaarsvlak, dan golvend,
+      // dan pas keien en een schans.
+      [['vlak'],
+       ['vlak', 'heuvels'],
+       ['vlak', 'heuvels'],
+       ['heuvels', 'hobbels', 'vlak'],
+       ['heuvels', 'schans', 'vlak'],
+       ['vlak', 'heuvels', 'hobbels', 'schans']]),
+  },
+  {
+    sleutel: 'bos',
+    naam: 'The forest track',
+    ondertitel: 'Roots, mud, and corners that are far too tight',
+    icoon: '🌲',
+    decor: 'bomen',
+    kleuren: {
+      luchtBoven: '#5fb0d4', luchtOnder: '#cfe8e0', zon: '#fff0c0',
+      verte: '#7fa87a', verteTwee: '#4f7a52',
+      gras: '#5a8f4a', grasDiep: '#3f6b3a', aarde: '#6b4f33',
+      decor: '#38612f', decorTwee: '#5a4028', accent: '#e8a03a',
+    },
+    levels: maakLevels(
+      ['Into the trees', 'The mud track', 'Tree roots', 'The woodpile',
+       'The little gorge', 'Over the stream', 'The steep bit', 'Deep in the wood',
+       'The descent', 'Out the other side'],
+      2101, 750, 1700, 0.30, 0.68, 1400, 3400,
+      ['modder', 'modder', 'hobbels', 'heuvels', 'klim', 'schans', 'afdaling']),
+  },
+  {
+    sleutel: 'duinen',
+    naam: 'The dunes',
+    ondertitel: 'Sand that swallows your wheels',
+    icoon: '🏖️',
+    decor: 'palen',
+    kleuren: {
+      luchtBoven: '#57b6e0', luchtOnder: '#dff0f6', zon: '#fff6cc',
+      verte: '#d8cfa8', verteTwee: '#bda878',
+      gras: '#dcc89a', grasDiep: '#bda06e', aarde: '#a08c60',
+      decor: '#8a6a48', decorTwee: '#5f7f4a', accent: '#e8573f',
+    },
+    levels: maakLevels(
+      ['Onto the beach', 'Loose sand', 'The dune fence', 'Behind the beach bar',
+       'The shell path', 'Over the crest', 'The highest dune', 'Down to the sea',
+       'The tide line', 'Last dune standing'],
+      3101, 1000, 2100, 0.38, 0.76, 1600, 3600,
+      ['zand', 'zand', 'heuvels', 'schans', 'klim', 'afdaling', 'hobbels']),
+  },
+  {
+    sleutel: 'bergpas',
+    naam: 'The mountain pass',
+    ondertitel: 'Up. And then very fast back down',
+    icoon: '⛰️',
+    decor: 'rotsen',
+    kleuren: {
+      luchtBoven: '#3f92cc', luchtOnder: '#cfe0ee', zon: '#fff2d0',
+      verte: '#a8b4c4', verteTwee: '#7f8a9a',
+      gras: '#8f9288', grasDiep: '#6a6c64', aarde: '#55534e',
+      decor: '#6e6a64', decorTwee: '#4a4744', accent: '#e8573f',
+    },
+    levels: maakLevels(
+      ['The first hairpin', 'Gravel road', 'The crash barrier', 'Scree slope',
+       'The viewpoint', 'Above the treeline', 'The wall', 'To the top',
+       'The descent', 'The whole pass'],
+      4101, 1300, 2700, 0.45, 0.84, 3400, 7500,
+      ['klim', 'afdaling', 'steilte', 'hobbels', 'heuvels']),
+  },
+  {
+    sleutel: 'fietspark',
+    naam: 'The bike park',
+    ondertitel: 'Built entirely out of things to jump off',
+    icoon: '🛝',
+    decor: 'schansen',
+    kleuren: {
+      luchtBoven: '#4a9fd0', luchtOnder: '#d8ecf4', zon: '#fff0b8',
+      verte: '#9ec49a', verteTwee: '#7aa878',
+      gras: '#a8794f', grasDiep: '#875f3c', aarde: '#6b4a2e',
+      decor: '#c8a04a', decorTwee: '#4f6b3f', accent: '#e8573f',
+    },
+    levels: maakLevels(
+      ['The green line', 'First double', 'Roll-in', 'The table top',
+       'Step-down', 'The gap', 'Rhythm section', 'The big one',
+       'Whip city', 'The full run'],
+      5101, 1300, 2600, 0.50, 0.88, 7000, 15000,
+      ['schans', 'dubbelschans', 'heuvels', 'hobbels', 'steilte']),
+  },
+  {
+    sleutel: 'nachtrit',
+    naam: 'The night ride',
+    ondertitel: 'Everything at once, and you cannot see much',
+    icoon: '🌃',
+    decor: 'lantaarns',
+    kleuren: {
+      luchtBoven: '#111a33', luchtOnder: '#3a3f66', zon: '#f0f0d8',
+      verte: '#2a3352', verteTwee: '#1e2540',
+      gras: '#2f4038', grasDiep: '#22302a', aarde: '#1c2420',
+      decor: '#f0c04a', decorTwee: '#33405a', accent: '#e8573f',
+    },
+    levels: maakLevels(
+      ['Out of town', 'Under the lamps', 'The ring road', 'The bad bit',
+       'The canal path', 'Cobbles at night', 'The long climb', 'Nothing but hills',
+       'The last descent', 'All the way home'],
+      6101, 1900, 4000, 0.60, 0.95, 14000, 32000,
+      ['heuvels', 'klim', 'afdaling', 'schans', 'modder', 'steilte', 'dubbelschans']),
+  },
+];
+
+
+/* ============================================================
+   Terugverwijzingen en doorlopende nummers
+
+   De rest van het spel praat over "level 23" en wil van elk
+   level weten in welke wereld het zit. Dat zetten we hier één
+   keer goed, zodat niemand het later hoeft uit te rekenen.
+   ============================================================ */
+const LEVELS = [];
+
+WERELDEN.forEach((w, wi) => {
+  w.index = wi;
+  w.levels.forEach((lv, li) => {
+    lv.wereld = w;
+    lv.inWereld = li;
+    lv.nummer = LEVELS.length;
+    LEVELS.push(lv);
+  });
+});
+
+/* ---------- js/natuurkunde.js ---------- */
+/* ============================================================
+   PEDAL!  --  6. DE NATUURKUNDE
+
+   Eén functie, `stapFiets`, zet de fiets één tijdstapje vooruit.
+   Die functie wordt door twee dingen gebruikt:
+
+     1. het echte spel, met jouw vingers als invoer,
+     2. de simulatie, die een level honderd keer in een fractie
+        van een seconde uitrijdt om te bepalen wat je ervoor
+        nodig hebt.
+
+   Dat het dezelfde functie is, is het hele punt. De tekst
+   "Needs: Legs ●●●○○" op het levelscherm is geen inschatting;
+   het is uitgerekend met precies dezelfde som die straks je
+   run bepaalt. Verander één getal in instellingen.js en alle
+   teksten in het spel kloppen weer.
+
+   `stapFiets` raakt niets buiten `f` aan. Geen canvas, geen
+   opslag, geen globalen. Daarom kan hij ook zonder browser.
+   ============================================================ */
+
+
+/* ============================================================
+   De spec: alles wat je fiets kan, in platte getallen
+
+   Onderdelen en fiets worden hier één keer samengevoegd. Daarna
+   weet de natuurkunde niets meer van upgrades of van welke
+   fiets je rijdt -- alleen nog van vermogen, weerstand en grip.
+   ============================================================ */
+function maakSpec(niveaus, fiets) {
+  const g = gaveVan(fiets);
+  const n = (sleutel) => niveaus[sleutel] || 0;
+
+  const vermogen = vermogenBij(n('aandrijving')) * g.vermogen;
+  const lucht = luchtBij(n('frame')) * g.lucht;
+
+  return {
+    fiets: fiets,
+    gave: g,
+
+    vermogen:  vermogen,
+    lucht:     lucht,
+    maxKracht: vermogen * INST.krachtPlafond,
+    topV:      topSnelheidVan(vermogen, lucht, INST.rolAsfalt),
+    remkracht: INST.remkracht * g.remmen,
+
+    // Kleiner is beter bij deze drie: het zijn wat er van de
+    // tegenwerking overblijft nadat je onderdelen hun werk doen.
+    klimHulp: klimHulpBij(n('versnellingen')) / Math.max(0.2, g.klim),
+    grip:     gripBij(n('banden')) * g.grip,
+    demping:  dempingBij(n('vering')) * g.demping,
+
+    landingsraam: landingsraamBij(n('vering')) * g.landing,
+    draaikracht:  INST.draaikracht * g.draai,
+
+    staminaMax: staminaMaxBij(n('benen')),
+    kosten:     INST.kostenPerSec * kostenBij(n('longen')) * g.stamina,
+    // Herstel hangt aan je eigen verbruik vast, niet aan een los
+    // getal -- zie de opmerking bij herstelDeel in instellingen.js.
+    herstel:    INST.kostenPerSec * kostenBij(n('longen')) * g.stamina *
+                herstelDeelBij(n('longen')),
+
+    geldMaal:   muntMaalBij(n('tassen')) * g.geld,
+    muntBereik: muntBereikBij(n('tassen')),
+  };
+}
+
+/* Rolweerstand hangt af van waar je overheen rijdt. Los terrein
+   is een bandenprobleem, ruw terrein een veringprobleem -- dus
+   twee verschillende upgrades, twee verschillende gevoelens. */
+function rolBij(soort, spec) {
+  let r = INST.rolAsfalt;
+  const los = INST.rolLos[soort];
+  if (los !== undefined) r += los * spec.grip;
+  const ruw = INST.rolRuw[soort];
+  if (ruw !== undefined) r += ruw * spec.demping;
+  return r;
+}
+
+
+/* ============================================================
+   De staat van één rit
+   ============================================================ */
+function nieuweRit(pad, spec) {
+  return {
+    modus: 'grond',    // 'grond' of 'lucht'
+    s: 0,              // afstand langs de baan (alleen op de grond)
+    v: 1.5,            // snelheid langs de baan
+    x: pad.pt[0].x,
+    y: pad.pt[0].y,
+    vx: 1.5, vy: 0,    // alleen in de lucht
+    rot: 0, rotV: 0,   // kantelhoek en hoe hard je draait
+    hint: 0,           // waar we vorige keer op de baan zaten
+    stamina: spec.staminaMax,
+    leeg: false,       // op is op: hierna herstelt er niets meer
+    verX: 0,           // verste punt, dat is wat je meterteller telt
+    tijd: 0,
+    luchttijd: 0,
+    trapfase: 0,       // stand van de trappers
+    wielfase: 0,
+    schud: 0,
+    einde: null,       // null | 'finish' | 'stuk' | 'crash'
+  };
+}
+
+/* Het verschil tussen twee hoeken, altijd tussen -π en π. Zonder
+   dit zou een keurige achterwaartse salto tellen als 360 graden
+   scheef in plaats van als nul. */
+function hoekVerschil(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+
+/* ============================================================
+   Eén tijdstapje
+   ============================================================ */
+function stapFiets(f, dt, inv, spec, pad) {
+  if (f.einde) return;
+  f.tijd += dt;
+  if (f.schud > 0) f.schud = Math.max(0, f.schud - dt * 3);
+
+  if (f.modus === 'grond') stapGrond(f, dt, inv, spec, pad);
+  else stapLucht(f, dt, inv, spec, pad);
+
+  if (f.x > f.verX) f.verX = f.x;
+
+  if (f.verX >= pad.finishX) { f.einde = 'finish'; return; }
+
+  // Leeg en stilgevallen. Je mag nog uitrollen -- ligt de finish net
+  // onderaan een afdaling, dan haal je hem alsnog op je laatste vaart.
+  if (f.modus === 'grond' && f.leeg && f.v < 0.4) f.einde = 'stuk';
+}
+
+
+function stapGrond(f, dt, inv, spec, pad) {
+  const p = puntBij(pad, f.s, f.hint);
+  f.hint = p.i;
+  f.x = p.x;
+  f.y = p.y;
+
+  const trapt = inv.trapt && !f.leeg;
+
+  /* ---- De krachten, allemaal in m/s² ---- */
+  let kracht = 0;
+  let inspanning = 0;
+
+  if (trapt) {
+    // Constant vermogen: bij lage snelheid veel kracht, bij hoge
+    // snelheid weinig. Daarom trekt een fiets snel op maar loopt
+    // hij daarna vast tegen de wind.
+    const duw = Math.min(spec.maxKracht, spec.vermogen / Math.max(INST.traagLimiet, f.v));
+    kracht += duw;
+    inspanning = duw / spec.maxKracht;
+  }
+
+  if (inv.remt) kracht -= spec.remkracht;
+
+  // De helling. Bergop knijpen de versnellingen dit af; bergaf
+  // krijg je de volle winst, want daar helpt geen verzet aan mee.
+  const zwaarte = INST.G * Math.sin(p.hoek);
+  kracht -= zwaarte > 0 ? zwaarte * spec.klimHulp : zwaarte;
+
+  kracht -= rolBij(p.soort, spec);
+  kracht -= spec.lucht * f.v * f.v;
+
+  f.v += kracht * dt;
+  if (f.v < INST.minSnelheid) f.v = INST.minSnelheid;
+  f.s += f.v * dt;
+
+  /* ---- Stamina ----
+     Wat je opbrandt is niet je snelheid maar je inspanning: hoe
+     dicht je tegen je maximale kracht aan zit. Vlak uitrijden
+     kost bijna niets, een klim kost alles. */
+  if (trapt) {
+    const deel = INST.kostenVloer + (1 - INST.kostenVloer) * inspanning;
+    f.stamina -= spec.kosten * deel * dt;
+    // Op is op. Zonder deze grendel herstel je tijdens het uitrollen
+    // net genoeg om weer één trap te geven, en dan houdt een run
+    // nooit meer op -- je kruipt eeuwig door op een lege tank.
+    if (f.stamina <= 0) { f.stamina = 0; f.leeg = true; }
+  } else if (!f.leeg) {
+    const bergaf = Math.max(0, -Math.sin(p.hoek));
+    f.stamina += spec.herstel * (1 + INST.herstelBergaf * bergaf) * dt;
+    f.stamina = Math.min(spec.staminaMax, f.stamina);
+  }
+
+  /* ---- Meedraaien met de weg ---- */
+  const volg = Math.min(1, INST.grondVolgen * dt);
+  f.rot += hoekVerschil(p.hoek, f.rot) * volg;
+  f.rotV = 0;
+  f.wielfase += (f.v * dt) / 0.34;
+  f.trapfase += f.v * dt * 0.62;
+
+  /* ---- Vlieg je eraf? ----
+     Op een bolle top (kromming negatief) moet de baan je naar
+     beneden trekken om je erop te houden. Kan de zwaartekracht
+     dat niet bijbenen, dan kom je los. Dat is precies wat een
+     schanslip is: een heel korte, heel bolle bocht. */
+  if (p.kromming < 0) {
+    const nodig = f.v * f.v * -p.kromming;
+    if (nodig > INST.G * Math.cos(p.hoek)) {
+      f.modus = 'lucht';
+      f.vx = f.v * Math.cos(p.hoek);
+      f.vy = f.v * Math.sin(p.hoek);
+      f.rotV = 0;
+      f.luchttijd = 0;
+    }
+  }
+}
+
+
+function stapLucht(f, dt, inv, spec, pad) {
+  f.vy -= INST.G * dt;
+  f.x += f.vx * dt;
+  f.y += f.vy * dt;
+  f.luchttijd += dt;
+  f.wielfase += dt * 6;
+
+  /* Kantelen. Trappen tilt je neus op, remmen duwt hem omlaag --
+     hetzelfde als op de grond, alleen doet het hier iets anders. */
+  let m = 0;
+  if (inv.trapt) m += 1;
+  if (inv.remt) m -= 1;
+  f.rotV += m * spec.draaikracht * dt;
+  f.rotV -= f.rotV * Math.min(1, INST.draaiRem * dt);
+  f.rotV = Math.max(-INST.maxDraai, Math.min(INST.maxDraai, f.rotV));
+  f.rot += f.rotV * dt;
+
+  const grond = grondBij(pad, f.x, f.hint);
+  if (grond && f.y <= grond.y) land(f, grond, spec);
+}
+
+/* Waar ligt de baan onder een bepaalde x?
+
+   Dit werkt zolang de baan van links naar rechts loopt. Komen er
+   loopings bij, dan moet hier de doorsnede van je vliegbaan met
+   de baanlijn worden gezocht in plaats van een opzoeking op x --
+   maar in een looping vlieg je toch niet. */
+function grondBij(pad, x, hint) {
+  const pt = pad.pt;
+  let i = Math.max(0, Math.min(pt.length - 2, hint || 0));
+  while (i > 0 && pt[i].x > x) i--;
+  while (i < pt.length - 2 && pt[i + 1].x < x) i++;
+
+  const a = pt[i], b = pt[i + 1];
+  const d = b.x - a.x;
+  if (d < 1e-6) return { y: a.y, hoek: pad.hoek[i], s: pad.s[i], i: i, x: x };
+  const t = Math.max(0, Math.min(1, (x - a.x) / d));
+  return {
+    y: a.y + (b.y - a.y) * t,
+    hoek: pad.hoek[i],
+    s: pad.s[i] + (pad.s[i + 1] - pad.s[i]) * t,
+    i: i,
+    x: x,
+  };
+}
+
+function land(f, g, spec) {
+  f.modus = 'grond';
+  f.s = g.s;
+  f.hint = g.i;
+  f.x = g.x;
+  f.y = g.y;
+
+  // Alleen het deel van je snelheid dat langs de grond wijst blijft over.
+  let v = f.vx * Math.cos(g.hoek) + f.vy * Math.sin(g.hoek);
+
+  const scheef = Math.abs(hoekVerschil(f.rot, g.hoek));
+  if (scheef > spec.landingsraam) {
+    if (scheef > spec.landingsraam * 2.1) {
+      f.einde = 'crash';
+      f.schud = 1;
+      f.v = 0;
+      return;
+    }
+    // Net te scheef: je blijft overeind maar het kost je vaart.
+    const over = (scheef - spec.landingsraam) / spec.landingsraam;
+    v *= 1 - INST.landingsverlies * Math.min(1, over);
+    f.schud = 0.55;
+  }
+
+  f.v = Math.max(0, v);
+  f.rot = g.hoek;
+  f.rotV = 0;
+  f.luchttijd = 0;
+}
+
+
+/* ============================================================
+   Munten oprapen
+
+   Staat hier en niet in het spel, omdat de simulatie ook moet
+   weten wat een run oplevert -- anders kun je niet nakijken of
+   je na een level genoeg verdient om verder te komen.
+
+   De munten liggen op x gesorteerd, dus we kijken alleen naar
+   het stukje lijst rond de fiets. De cursor schuift mee vooruit
+   en gaat nooit terug.
+   ============================================================ */
+function nieuweMuntenStaat(pad) {
+  for (const m of pad.munten) m.weg = false;
+  return { cursor: 0, aantal: 0 };
+}
+
+function pakMunten(pad, f, spec, st) {
+  const munten = pad.munten;
+  const bereik = spec.muntBereik;
+  const fx = f.x, fy = f.y + 0.75;
+  const gepakt = [];
+
+  while (st.cursor < munten.length && munten[st.cursor].x < fx - bereik - 2) st.cursor++;
+
+  for (let i = st.cursor; i < munten.length; i++) {
+    const m = munten[i];
+    if (m.x > fx + bereik + 2) break;
+    if (m.weg) continue;
+    if (Math.hypot(m.x - fx, m.y - fy) < bereik) {
+      m.weg = true;
+      st.aantal++;
+      gepakt.push(m);
+    }
+  }
+  return gepakt;
+}
+
+
+/* ============================================================
+   De simulatie
+
+   Dezelfde stap, maar met een robot aan het stuur en een vaste
+   tijdstap. De robot rijdt niet briljant: hij trapt gewoon
+   altijd, behalve waar iedereen zou uitrollen (hard bergaf op
+   topsnelheid), en in de lucht richt hij zijn neus op de
+   landing. Dat is expres een middelmatige fietser -- lukt het
+   hem, dan lukt het jou ook.
+   ============================================================ */
+function robotInvoer(f, spec, pad) {
+  if (f.modus === 'lucht') {
+    // Kijken naar de helling waar je zo ongeveer neerkomt, en je
+    // fiets daar naartoe draaien. Dat is precies wat een speler
+    // met de twee knoppen doet.
+    const vooruit = Math.max(0.5, f.vx) * 0.45;
+    const doel = grondBij(pad, f.x + vooruit, f.hint).hoek;
+    const verschil = hoekVerschil(doel, f.rot);
+    return { trapt: verschil > 0.03, remt: verschil < -0.03 };
+  }
+  const p = puntBij(pad, f.s, f.hint);
+  // Bergaf op topsnelheid is trappen weggegooide stamina
+  if (p.hoek < -0.03 && f.v > spec.topV * 0.95) return { trapt: false, remt: false };
+  return { trapt: true, remt: false };
+}
+
+function simuleerRun(level, spec) {
+  const pad = padVan(level);
+  const f = nieuweRit(pad, spec);
+  const munten = nieuweMuntenStaat(pad);
+  const dt = 1 / 40;
+  let rem = 0;
+
+  while (!f.einde && rem++ < 40 * 900) {
+    stapFiets(f, dt, robotInvoer(f, spec, pad), spec, pad);
+    pakMunten(pad, f, spec, munten);
+  }
+
+  return {
+    gehaald: f.einde === 'finish',
+    einde: f.einde || 'tijd',
+    verX: f.verX,
+    deel: Math.min(1, f.verX / level.lengte),
+    tijd: f.tijd,
+    stamina: f.stamina,
+    munten: munten.aantal,
+  };
+}
+
+/* Wat een run oplevert. Het spel rekent hetzelfde uit in spel.js,
+   maar de simulatie moet het ook weten om te kunnen nakijken of
+   je genoeg verdient om verder te komen. */
+function buitVan(level, uit, spec, eerste) {
+  const meters = Math.round(Math.min(uit.verX, level.lengte) * INST.geldPerMeter);
+  const uitMunten = Math.round(uit.munten * INST.muntWaarde * spec.geldMaal);
+  const bonus = uit.gehaald
+    ? Math.round(level.bonus * (eerste ? INST.eersteKeerMaal : 1)) : 0;
+  return { meters, uitMunten, bonus, eerste, totaal: meters + uitMunten + bonus };
+}
+
+
+/* ============================================================
+   Wat heb je ervoor nodig?
+
+   Meer van een onderdeel maakt het nooit erger, dus we kunnen
+   het laagste niveau dat volstaat opzoeken door de helft te
+   nemen -- vier simulaties in plaats van acht.
+   ============================================================ */
+function benodigdNiveau(level, sleutel, niveaus, fiets) {
+  const onderdeel = onderdeelMet(sleutel);
+  const nu = niveaus[sleutel] || 0;
+
+  // Haal je hem al zoals je erbij staat, dan heb je hier niets voor
+  // nodig. Zonder deze regel zou de zoektocht hieronder altijd het
+  // eerstvolgende niveau aanwijzen, ook als er niets aan de hand is.
+  if (simuleerRun(level, maakSpec(niveaus, fiets)).gehaald) return 0;
+  if (nu >= onderdeel.max) return null;
+
+  const probeer = (n) => {
+    const kopie = Object.assign({}, niveaus);
+    kopie[sleutel] = n;
+    return simuleerRun(level, maakSpec(kopie, fiets)).gehaald;
+  };
+
+  if (!probeer(onderdeel.max)) return null;   // ook vol is het niet genoeg
+
+  let laag = nu + 1, hoog = onderdeel.max;
+  while (laag < hoog) {
+    const mid = Math.floor((laag + hoog) / 2);
+    if (probeer(mid)) hoog = mid; else laag = mid + 1;
+  }
+  return laag;
+}
+
+/* Zodra je iets koopt klopt elk antwoord hierboven niet meer, dus
+   alles wordt onthouden onder een sleutel waar je hele fiets in
+   zit. Koop je niets, dan wordt er ook niets opnieuw gerekend. */
+function fietsSleutel(niveaus, fiets) {
+  return fiets.sleutel + '|' + ONDERDELEN.map((u) => niveaus[u.sleutel] || 0).join(',');
+}
+
+/* De goedkope vraag: haal ik dit level zoals ik er nu bij sta?
+   Eén simulatie. Dit staat op elke levelkaart. */
+const _kanCache = {};
+
+function kanVan(level, niveaus, fiets) {
+  const sleutel = level.nummer + '|' + fietsSleutel(niveaus, fiets);
+  if (_kanCache[sleutel]) return _kanCache[sleutel];
+
+  const uit = simuleerRun(level, maakSpec(niveaus, fiets));
+  const antwoord = { kan: uit.gehaald, deel: uit.deel, reden: uit.einde };
+  _kanCache[sleutel] = antwoord;
+  return antwoord;
+}
+
+/* De dure vraag: en wat heb ik dan nodig? Dit zoekt per onderdeel
+   het laagste niveau dat volstaat, dus dat vragen we alleen als
+   het echt nodig is -- op het eindscherm en bij het eerste level
+   dat je niet haalt. */
+const _eisCache = {};
+
+function eisVan(level, niveaus, fiets) {
+  const sleutel = level.nummer + '|' + fietsSleutel(niveaus, fiets);
+  if (_eisCache[sleutel]) return _eisCache[sleutel];
+
+  const basis = kanVan(level, niveaus, fiets);
+  let antwoord;
+
+  if (basis.kan) {
+    antwoord = { kan: true, tekst: 'Your bike can do this', opties: [] };
+  } else {
+    // Welke enkele upgrade lost het op, en welke daarvan is het goedkoopst?
+    const opties = [];
+    ONDERDELEN.forEach((u) => {
+      const n = benodigdNiveau(level, u.sleutel, niveaus, fiets);
+      if (!n) return;
+      const nu = niveaus[u.sleutel] || 0;
+      let prijs = 0;
+      for (let i = nu; i < n; i++) prijs += u.prijzen[i];
+      opties.push({ onderdeel: u, niveau: n, prijs: prijs });
+    });
+    opties.sort((a, b) => a.prijs - b.prijs);
+
+    antwoord = opties.length === 0
+      ? { kan: false, tekst: 'Not on this bike, however you set it up', opties: [] }
+      : {
+          kan: false,
+          opties: opties,
+          tekst: 'Needs ' + opties[0].onderdeel.naam + ' ' +
+                 bolletjes(opties[0].niveau, opties[0].onderdeel.max),
+        };
+  }
+
+  antwoord.deel = basis.deel;
+  antwoord.reden = basis.reden;
+  _eisCache[sleutel] = antwoord;
+  return antwoord;
+}
+
+/* ●●●○○ -- ook gebruikt door de garage */
+function bolletjes(niveau, max) {
+  return '●'.repeat(niveau) + '○'.repeat(Math.max(0, max - niveau));
+}
+
+/* ---------- js/opslag.js ---------- */
+/* ============================================================
+   PEDAL!  --  7. WAT HET SPEL ONTHOUDT
+
+   Alles gaat in het geheugen van de browser. Zet je het spel op
+   je beginscherm, dan blijft je voortgang staan als je hem
+   afsluit.
+
+   Lukt opslaan niet -- in een privévenster bijvoorbeeld -- dan
+   speelt het spel gewoon door. Je begint dan elke keer opnieuw,
+   maar je krijgt nooit een foutmelding over iets waar je niets
+   aan kunt doen.
+   ============================================================ */
+
+const OPSLAG_SLEUTEL = 'pedal-voortgang-v1';
+
+function leegDossier() {
+  const upgrades = {};
+  ONDERDELEN.forEach((u) => { upgrades[u.sleutel] = 0; });
+  return {
+    geld: 0,
+    totaalVerdiend: 0,
+    upgrades: upgrades,
+    gekocht: [FIETSEN[0].sleutel],
+    fiets: FIETSEN[0].sleutel,
+    gehaald: LEVELS.map(() => false),
+    verste: LEVELS.map(() => 0),
+    geluid: true,
+  };
+}
+
+function leesDossier() {
+  const uit = leegDossier();
+  let rauw = null;
+  try { rauw = localStorage.getItem(OPSLAG_SLEUTEL); } catch (e) { return uit; }
+  if (!rauw) return uit;
+
+  try {
+    const data = JSON.parse(rauw);
+
+    uit.geld = Math.max(0, Number(data.geld) || 0);
+    uit.totaalVerdiend = Math.max(0, Number(data.totaalVerdiend) || 0);
+    if (data.geluid === false) uit.geluid = false;
+
+    // Voorzichtig samenvoegen. Zijn er later onderdelen, fietsen of
+    // levels bijgekomen, dan vullen we die aan in plaats van te
+    // struikelen over een oud opgeslagen bestand.
+    ONDERDELEN.forEach((u) => {
+      const n = Number(data.upgrades && data.upgrades[u.sleutel]) || 0;
+      uit.upgrades[u.sleutel] = Math.max(0, Math.min(u.max, n));
+    });
+
+    if (Array.isArray(data.gekocht)) {
+      uit.gekocht = FIETSEN
+        .filter((f) => f.prijs === 0 || data.gekocht.indexOf(f.sleutel) !== -1)
+        .map((f) => f.sleutel);
+    }
+    if (uit.gekocht.indexOf(data.fiets) !== -1) uit.fiets = data.fiets;
+
+    if (Array.isArray(data.gehaald)) {
+      uit.gehaald = LEVELS.map((_, i) => data.gehaald[i] === true);
+    }
+    if (Array.isArray(data.verste)) {
+      uit.verste = LEVELS.map((_, i) => Math.max(0, Number(data.verste[i]) || 0));
+    }
+  } catch (e) {
+    return leegDossier();
+  }
+  return uit;
+}
+
+function bewaarDossier() {
+  try {
+    localStorage.setItem(OPSLAG_SLEUTEL, JSON.stringify(dossier));
+  } catch (e) {
+    // Niet erg. Doorspelen kan gewoon.
+  }
+}
+
+let dossier = leesDossier();
+
+function wisDossier() {
+  try { localStorage.removeItem(OPSLAG_SLEUTEL); } catch (e) { /* ook goed */ }
+  dossier = leegDossier();
+}
+
+
+/* ============================================================
+   Vragen die de rest van het spel stelt
+   ============================================================ */
+
+function niveauVan(sleutel) { return dossier.upgrades[sleutel] || 0; }
+
+function huidigeFiets() { return fietsMet(dossier.fiets); }
+
+function heeftFiets(fiets) { return dossier.gekocht.indexOf(fiets.sleutel) !== -1; }
+
+/* De spec waarmee je nu rijdt */
+function huidigeSpec() {
+  return maakSpec(dossier.upgrades, huidigeFiets());
+}
+
+/* Dezelfde spec, maar met één onderdeel op een ander niveau. Hier
+   komt de "Now: 24.1 km/h → 26.3 km/h" in de garage vandaan, en
+   omdat het een echte spec is kan die tekst niet liegen. */
+function specMet(sleutel, n) {
+  const kopie = Object.assign({}, dossier.upgrades);
+  kopie[sleutel] = n;
+  return maakSpec(kopie, huidigeFiets());
+}
+
+/* Een level gaat open zodra je het vorige gehaald hebt */
+function isVrijgespeeld(nummer) {
+  if (nummer <= 0) return true;
+  return dossier.gehaald[nummer - 1] === true;
+}
+
+function wereldVrij(wereld) {
+  return isVrijgespeeld(wereld.levels[0].nummer);
+}
+
+function verdien(bedrag) {
+  const afgerond = Math.max(0, Math.round(bedrag));
+  dossier.geld += afgerond;
+  dossier.totaalVerdiend += afgerond;
+  bewaarDossier();
+  return afgerond;
+}
+
+function betaal(bedrag) {
+  if (dossier.geld < bedrag) return false;
+  dossier.geld -= bedrag;
+  bewaarDossier();
+  return true;
+}
+
+function noteerPoging(level, verX, gehaald) {
+  const i = level.nummer;
+  if (verX > dossier.verste[i]) dossier.verste[i] = Math.round(verX);
+  if (gehaald) dossier.gehaald[i] = true;
+  bewaarDossier();
+}
+
+/* Geld staat overal als $1,234 op het scherm */
+function geld(n) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+/* ---------- js/tekenen.js ---------- */
+/* ============================================================
+   PEDAL!  --  8. TEKENEN
+
+   Zijaanzicht, gewoon canvas 2D. Geen plaatjes: alles wat je
+   ziet is uit lijnen en vlakken opgebouwd. Dat scheelt laadtijd,
+   het schaalt naar elk scherm, en een fiets in een andere kleur
+   is één getal.
+
+   Alles binnen `wereldAan()` tekent in meters, niet in pixels.
+   De transformatie zet de wereld goed neer -- inclusief het
+   omdraaien van de y-as, want in een canvas wijst die naar
+   beneden en in de natuurkunde naar boven. Daardoor ziet de
+   tekencode er precies zo uit als de somme<n eronder.
+   ============================================================ */
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let veldB = 0, veldH = 0;     // in CSS-pixels
+let schaal = 30;              // pixels per meter
+let ankerX = 0, ankerY = 0;   // waar de camera in beeld zit
+let camX = 0, camY = 0;
+
+let deeltjes = [];
+
+
+/* ============================================================
+   Maat houden
+
+   100dvh is op iOS niet te vertrouwen: de adresbalk schuift weg
+   en komt terug, en dan klopt het canvas niet meer met wat je
+   ziet. Daarom zetten we de hoogte zelf, en geven we door
+   hoeveel de balk onderin wegneemt zodat knoppen bereikbaar
+   blijven.
+   ============================================================ */
+function zetSchermhoogte() {
+  const scherm = document.querySelector('.scherm');
+  const vol = window.innerHeight;
+  const zicht = (window.visualViewport && window.visualViewport.height) || vol;
+  scherm.style.height = vol + 'px';
+  document.documentElement.style.setProperty('--onderrand', Math.max(0, vol - zicht) + 'px');
+}
+
+function pasMaatAan() {
+  zetSchermhoogte();
+
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  veldB = canvas.clientWidth || window.innerWidth;
+  veldH = canvas.clientHeight || window.innerHeight;
+  canvas.width = Math.round(veldB * dpr);
+  canvas.height = Math.round(veldH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Ongeveer 26 meter baan in beeld. Op een staande telefoon zou dat
+  // een postzegel worden, dus daar zoomen we wat in.
+  const staand = veldH > veldB;
+  schaal = Math.max(14, Math.min(58, veldB / (staand ? 17 : 26)));
+
+  ankerX = veldB * INST.camVoor;
+  ankerY = veldH * (staand ? 0.62 : 0.68);
+}
+
+window.addEventListener('resize', pasMaatAan);
+window.addEventListener('orientationchange', pasMaatAan);
+window.addEventListener('load', pasMaatAan);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', pasMaatAan);
+
+
+/* ---- Van wereld naar scherm, voor alles buiten de transformatie ---- */
+function sx(wx) { return ankerX + (wx - camX) * schaal; }
+function sy(wy) { return ankerY - (wy - camY) * schaal; }
+
+function wereldAan() {
+  ctx.save();
+  ctx.translate(ankerX, ankerY);
+  ctx.scale(schaal, -schaal);
+  ctx.translate(-camX, -camY);
+}
+function wereldUit() { ctx.restore(); }
+
+/* Hoeveel meter er links en rechts van de camera in beeld past */
+function beeldLinks()  { return camX - ankerX / schaal - 2; }
+function beeldRechts() { return camX + (veldB - ankerX) / schaal + 2; }
+
+
+/* ============================================================
+   Kleine helpers
+   ============================================================ */
+function lijn(x1, y1, x2, y2, dikte, kleur) {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineWidth = dikte;
+  ctx.strokeStyle = kleur;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+function cirkel(x, y, r, kleur) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = kleur;
+  ctx.fill();
+}
+
+function ring(x, y, r, dikte, kleur) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.lineWidth = dikte;
+  ctx.strokeStyle = kleur;
+  ctx.stroke();
+}
+
+/* Een tweeledig ledemaat: heup en pedaal staan vast, de knie
+   volgt daaruit. `kant` bepaalt welke van de twee oplossingen. */
+function knieVan(ax, ay, bx, by, l1, l2, kant) {
+  const dx = bx - ax, dy = by - ay;
+  let d = Math.hypot(dx, dy);
+  if (d < 1e-4) d = 1e-4;
+  const bereik = Math.min(d, l1 + l2 - 1e-4);
+  const a = (l1 * l1 - l2 * l2 + bereik * bereik) / (2 * bereik);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  const ux = dx / d, uy = dy / d;
+  return { x: ax + ux * a - uy * h * kant, y: ay + uy * a + ux * h * kant };
+}
+
+/* Vast toeval per index -- decor dat elke frame op dezelfde plek staat */
+function ruis(i) {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+
+/* ============================================================
+   De achtergrond
+
+   Drie lagen die steeds langzamer meebewegen: lucht (helemaal
+   stil), verre heuvels, en het decor langs de weg. Dat is alles
+   wat je nodig hebt om diepte te suggereren.
+   ============================================================ */
+function tekenLucht(kl) {
+  const verloop = ctx.createLinearGradient(0, 0, 0, veldH);
+  verloop.addColorStop(0, kl.luchtBoven);
+  verloop.addColorStop(1, kl.luchtOnder);
+  ctx.fillStyle = verloop;
+  ctx.fillRect(0, 0, veldB, veldH);
+
+  // De zon staat vast in beeld; hij is oneindig ver weg.
+  const zonX = veldB * 0.78, zonY = veldH * 0.20, zonR = Math.min(veldB, veldH) * 0.10;
+  ctx.beginPath();
+  ctx.ellipse(zonX, zonY, zonR, zonR * 1.08, 0, 0, Math.PI * 2);
+  ctx.fillStyle = kl.zon;
+  ctx.fill();
+
+  // Wolken. Ze schuiven heel traag mee, net genoeg om te merken.
+  const grond = sy(camY);
+  for (let i = 0; i < 7; i++) {
+    const breed = veldB * (0.13 + ruis(i) * 0.10);
+    const spoor = veldB * 2.2;
+    let x = (i * spoor) / 7 - camX * schaal * 0.06;
+    x = ((x % spoor) + spoor) % spoor - veldB * 0.6;
+    const y = veldH * (0.08 + ruis(i + 40) * 0.24);
+    if (y > grond) continue;
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, breed * 0.55, breed * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + breed * 0.32, y - breed * 0.09, breed * 0.36, breed * 0.20, 0, 0, Math.PI * 2);
+    ctx.ellipse(x - breed * 0.30, y + breed * 0.03, breed * 0.30, breed * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* Twee rijen heuvels achter elkaar. Een som van sinussen is
+   genoeg -- je ziet ze toch nooit lang genoeg om te merken dat
+   het steeds dezelfde zijn. */
+function heuvelrij(kleur, parallax, basis, amp, golf) {
+  const y0 = sy(camY) + basis;
+  ctx.beginPath();
+  ctx.moveTo(0, veldH);
+  for (let px = 0; px <= veldB; px += 8) {
+    const w = camX * parallax + px / schaal;
+    const h = Math.sin(w * golf) * amp + Math.sin(w * golf * 2.3 + 1.7) * amp * 0.45;
+    ctx.lineTo(px, y0 - h * schaal);
+  }
+  ctx.lineTo(veldB, veldH);
+  ctx.closePath();
+  ctx.fillStyle = kleur;
+  ctx.fill();
+}
+
+function tekenVerte(kl) {
+  heuvelrij(kl.verte, 0.22, 6, 1.9, 0.055);
+  heuvelrij(kl.verteTwee, 0.42, 22, 1.3, 0.085);
+}
+
+
+/* ============================================================
+   Het decor langs de weg
+
+   Molens, bomen, palen. Ze staan in schermruimte met hun eigen
+   parallax, want ze horen bij de achtergrond en niet bij de
+   baan waar je overheen rijdt.
+   ============================================================ */
+function tekenDecor(wereld, tijd) {
+  const kl = wereld.kleuren;
+  const parallax = 0.62;
+  const grond = sy(camY - 0.4);
+  const tussen = 26;                       // meter tussen twee stuks
+  const eersteI = Math.floor((camX * parallax - 30) / tussen);
+  const laatsteI = Math.ceil((camX * parallax + veldB / schaal + 30) / tussen);
+
+  for (let i = eersteI; i <= laatsteI; i++) {
+    const wx = i * tussen + ruis(i) * 14;
+    const px = ankerX + (wx - camX * parallax) * schaal;
+    if (px < -140 || px > veldB + 140) continue;
+    const maat = (0.8 + ruis(i + 7) * 0.5) * schaal;
+
+    if (wereld.decor === 'molens')        molen(px, grond, maat, kl, tijd + i);
+    else if (wereld.decor === 'bomen')    boom(px, grond, maat, kl, i);
+    else if (wereld.decor === 'palen')    paal(px, grond, maat, kl, i);
+    else if (wereld.decor === 'rotsen')   rots(px, grond, maat, kl, i);
+    else if (wereld.decor === 'schansen') parkschans(px, grond, maat, kl, i);
+    else                                  lantaarn(px, grond, maat, kl, i);
+  }
+}
+
+function molen(px, py, m, kl, fase) {
+  // De romp
+  ctx.beginPath();
+  ctx.moveTo(px - m * 0.42, py);
+  ctx.lineTo(px - m * 0.15, py - m * 2.5);
+  ctx.lineTo(px + m * 0.15, py - m * 2.5);
+  ctx.lineTo(px + m * 0.42, py);
+  ctx.closePath();
+  ctx.fillStyle = kl.decorTwee;
+  ctx.fill();
+
+  // De wieken, langzaam rond
+  const asY = py - m * 2.6;
+  const hoek = fase * 0.5;
+  ctx.strokeStyle = kl.decor;
+  ctx.lineWidth = Math.max(2, m * 0.11);
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 4; k++) {
+    const a = hoek + (k * Math.PI) / 2;
+    ctx.beginPath();
+    ctx.moveTo(px, asY);
+    ctx.lineTo(px + Math.cos(a) * m * 1.5, asY + Math.sin(a) * m * 1.5);
+    ctx.stroke();
+  }
+  cirkel(px, asY, m * 0.13, kl.decor);
+}
+
+function boom(px, py, m, kl, i) {
+  ctx.fillStyle = kl.decorTwee;
+  ctx.fillRect(px - m * 0.08, py - m * 1.1, m * 0.16, m * 1.1);
+  ctx.fillStyle = kl.decor;
+  const lagen = 3;
+  for (let k = 0; k < lagen; k++) {
+    const b = m * (0.62 - k * 0.15);
+    const t = py - m * (0.85 + k * 0.55);
+    ctx.beginPath();
+    ctx.moveTo(px - b, t);
+    ctx.lineTo(px + b, t);
+    ctx.lineTo(px, t - m * 0.85);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function paal(px, py, m, kl, i) {
+  ctx.fillStyle = kl.decor;
+  ctx.fillRect(px - m * 0.07, py - m * 1.6, m * 0.14, m * 1.6);
+  ctx.fillStyle = kl.accent;
+  ctx.fillRect(px - m * 0.07, py - m * 1.6, m * 0.14, m * 0.28);
+  ctx.fillStyle = kl.decorTwee;
+  for (let k = 0; k < 4; k++) {
+    ctx.fillRect(px + m * (0.16 + k * 0.10), py - m * (0.5 + ruis(i + k) * 0.5), m * 0.05, m * 0.6);
+  }
+}
+
+function rots(px, py, m, kl, i) {
+  ctx.beginPath();
+  ctx.moveTo(px - m * 0.9, py);
+  ctx.lineTo(px - m * 0.3, py - m * (1.4 + ruis(i) * 0.9));
+  ctx.lineTo(px + m * 0.25, py - m * (0.9 + ruis(i + 3) * 1.2));
+  ctx.lineTo(px + m * 0.95, py);
+  ctx.closePath();
+  ctx.fillStyle = kl.decor;
+  ctx.fill();
+}
+
+function parkschans(px, py, m, kl, i) {
+  ctx.beginPath();
+  ctx.moveTo(px - m * 0.9, py);
+  ctx.quadraticCurveTo(px + m * 0.2, py - m * 0.2, px + m * 0.7, py - m * 1.0);
+  ctx.lineTo(px + m * 0.9, py - m * 1.0);
+  ctx.lineTo(px + m * 0.9, py);
+  ctx.closePath();
+  ctx.fillStyle = kl.decorTwee;
+  ctx.fill();
+}
+
+function lantaarn(px, py, m, kl, i) {
+  ctx.strokeStyle = kl.decorTwee;
+  ctx.lineWidth = Math.max(2, m * 0.09);
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px, py - m * 2.1);
+  ctx.quadraticCurveTo(px, py - m * 2.4, px + m * 0.4, py - m * 2.4);
+  ctx.stroke();
+  cirkel(px + m * 0.45, py - m * 2.36, m * 0.16, kl.decor);
+  // Een zachte lichtkegel naar beneden
+  const licht = ctx.createLinearGradient(px, py - m * 2.3, px, py);
+  licht.addColorStop(0, 'rgba(240,192,74,0.30)');
+  licht.addColorStop(1, 'rgba(240,192,74,0)');
+  ctx.fillStyle = licht;
+  ctx.beginPath();
+  ctx.moveTo(px + m * 0.45, py - m * 2.3);
+  ctx.lineTo(px + m * 1.5, py);
+  ctx.lineTo(px - m * 0.6, py);
+  ctx.closePath();
+  ctx.fill();
+}
+
+
+/* ============================================================
+   De baan zelf
+
+   Eerst het hele grondvlak in één kleur, en daar bovenop een
+   dikke lijn per soort ondergrond. Zo zie je meteen waar het
+   zand begint zonder dat er ook maar iets extra's aan te pas
+   komt.
+   ============================================================ */
+const SOORTKLEUR = {
+  grind:   '#9a9288',
+  modder:  '#63492f',
+  zand:    '#e0cb9c',
+  gras:    null,          // neemt de graskleur van de wereld
+  hobbels: '#8a8078',
+  keien:   '#8f8b84',
+  hout:    '#a8794f',
+  asfalt:  null,
+};
+
+function tekenTerrein(pad, kl) {
+  const links = beeldLinks(), rechts = beeldRechts();
+  const pt = pad.pt;
+
+  // Het eerste punt links van beeld opzoeken
+  let van = 0;
+  while (van < pt.length - 2 && pt[van + 1].x < links) van++;
+  let tot = van;
+  while (tot < pt.length - 1 && pt[tot].x < rechts) tot++;
+
+  const diepte = veldH / schaal + 10;
+
+  // De grond als één vlak
+  ctx.beginPath();
+  ctx.moveTo(pt[van].x, pt[van].y - diepte);
+  for (let i = van; i <= tot; i++) ctx.lineTo(pt[i].x, pt[i].y);
+  ctx.lineTo(pt[tot].x, pt[tot].y - diepte);
+  ctx.closePath();
+  ctx.fillStyle = kl.aarde;
+  ctx.fill();
+
+  // En daaroverheen de deklaag, per soort
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
+  let i = van;
+  while (i < tot) {
+    const soort = pt[i].soort;
+    const kleur = SOORTKLEUR[soort] || kl.gras;
+    let j = i;
+    while (j < tot && pt[j].soort === soort) j++;
+    ctx.beginPath();
+    ctx.moveTo(pt[i].x, pt[i].y);
+    for (let k = i + 1; k <= j; k++) ctx.lineTo(pt[k].x, pt[k].y);
+    ctx.lineWidth = 0.42;
+    ctx.strokeStyle = kleur;
+    ctx.stroke();
+    i = j;
+  }
+
+  // Een dun donker streepje onder de deklaag maakt de rand scherp
+  ctx.beginPath();
+  ctx.moveTo(pt[van].x, pt[van].y - 0.24);
+  for (let k = van + 1; k <= tot; k++) ctx.lineTo(pt[k].x, pt[k].y - 0.24);
+  ctx.lineWidth = 0.10;
+  ctx.strokeStyle = kl.grasDiep;
+  ctx.stroke();
+}
+
+function tekenFinish(pad, kl) {
+  const x = pad.finishX;
+  if (x < beeldLinks() - 4 || x > beeldRechts() + 4) return;
+  const g = grondBij(pad, x, 0);
+
+  ctx.lineWidth = 0.12;
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(x, g.y);
+  ctx.lineTo(x, g.y + 4.6);
+  ctx.stroke();
+
+  // Geblokte vlag
+  const hok = 0.34;
+  for (let r = 0; r < 3; r++) {
+    for (let k = 0; k < 5; k++) {
+      ctx.fillStyle = (r + k) % 2 ? '#ffffff' : '#1a1a1a';
+      ctx.fillRect(x + 0.06 + k * hok, g.y + 4.6 - (r + 1) * hok, hok, hok);
+    }
+  }
+}
+
+function tekenMunten(pad) {
+  const links = beeldLinks(), rechts = beeldRechts();
+  const t = performance.now() / 1000;
+  for (const m of pad.munten) {
+    if (m.weg || m.x < links || m.x > rechts) continue;
+    // Even op en neer, en een beetje smaller alsof hij ronddraait
+    const wip = Math.sin(t * 3 + m.x * 0.7) * 0.07;
+    const breed = 0.20 * (0.55 + 0.45 * Math.abs(Math.cos(t * 2.2 + m.x)));
+    ctx.beginPath();
+    ctx.ellipse(m.x, m.y + wip, breed, 0.20, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#f0c04a';
+    ctx.fill();
+    ctx.lineWidth = 0.045;
+    ctx.strokeStyle = '#b8913a';
+    ctx.stroke();
+  }
+}
+
+
+/* ============================================================
+   Deeltjes -- stof bij een landing, gruis bij een crash
+   ============================================================ */
+function maakDeeltjes(x, y, aantal, kleur, kracht) {
+  for (let i = 0; i < aantal; i++) {
+    const a = Math.random() * Math.PI - Math.PI * 0.1;
+    const v = (0.4 + Math.random()) * kracht;
+    deeltjes.push({
+      x: x, y: y,
+      vx: Math.cos(a) * v * 0.6 - 1,
+      vy: Math.sin(a) * v,
+      leven: 0.5 + Math.random() * 0.5,
+      r: 0.06 + Math.random() * 0.10,
+      kleur: kleur,
+    });
+  }
+  if (deeltjes.length > 220) deeltjes = deeltjes.slice(-220);
+}
+
+function werkDeeltjesBij(dt) {
+  for (const d of deeltjes) {
+    d.vy -= 7 * dt;
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    d.leven -= dt;
+  }
+  deeltjes = deeltjes.filter((d) => d.leven > 0);
+}
+
+function tekenDeeltjes() {
+  for (const d of deeltjes) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, d.leven * 1.6));
+    cirkel(d.x, d.y, d.r, d.kleur);
+  }
+  ctx.globalAlpha = 1;
+}
+
+
+/* ============================================================
+   De fiets
+
+   Getekend in zijn eigen assenstelsel: de oorsprong is het punt
+   waar de banden de grond raken, y omhoog, x vooruit. De hele
+   fiets kantelt om dat punt. Alles hieronder staat in meters.
+   ============================================================ */
+const F = {
+  wiel:    0.34,
+  achter: -0.53,
+  voor:    0.52,
+  trapas:  { x: -0.05, y: 0.30 },
+  zadel:   { x: -0.38, y: 0.93 },
+  balhoofd:{ x:  0.44, y: 0.84 },
+  stuur:   { x:  0.42, y: 0.94 },
+  crank:   0.17,
+  bovenbeen: 0.46,
+  onderbeen: 0.46,
+  bovenarm:  0.30,
+  onderarm:  0.30,
+};
+
+function tekenWiel(cx, cy, fase, kleur) {
+  cirkel(cx, cy, F.wiel, '#1a1a1e');                 // band
+  cirkel(cx, cy, F.wiel - 0.075, '#e8e8e8');         // velg
+  ctx.strokeStyle = '#c6c6c6';
+  ctx.lineWidth = 0.022;
+  for (let k = 0; k < 8; k++) {
+    const a = fase + (k * Math.PI) / 4;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * (F.wiel - 0.09), cy + Math.sin(a) * (F.wiel - 0.09));
+    ctx.stroke();
+  }
+  cirkel(cx, cy, 0.05, kleur);
+}
+
+function tekenFiets(f, fiets) {
+  const kl = fiets.kleur, kl2 = fiets.kleurTwee;
+
+  // Schaduw op de grond. Terwijl je vliegt krimpt hij, en dan is
+  // het meteen je hoogtemeter.
+  ctx.save();
+  const grondSchaduw = f.modus === 'lucht' ? Math.max(0.25, 1 - f.luchttijd * 0.8) : 1;
+  ctx.globalAlpha = 0.20 * grondSchaduw;
+  ctx.beginPath();
+  ctx.ellipse(f.x, f.schaduwY === undefined ? f.y : f.schaduwY, 0.85 * grondSchaduw, 0.13, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#000000';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.rot);
+
+  const wielY = F.wiel;
+
+  /* ---- Wielen ---- */
+  tekenWiel(F.achter, wielY, f.wielfase, kl2);
+  tekenWiel(F.voor, wielY, f.wielfase, kl2);
+
+  /* ---- Frame ---- */
+  const A = { x: F.achter, y: wielY };
+  const V = { x: F.voor, y: wielY };
+  const T = F.trapas, Z = F.zadel, B = F.balhoofd;
+  ctx.lineCap = 'round';
+  lijn(A.x, A.y, T.x, T.y, 0.075, kl);          // liggende achtervork
+  lijn(A.x, A.y, Z.x, Z.y, 0.070, kl);          // staande achtervork
+  lijn(T.x, T.y, Z.x, Z.y, 0.080, kl);          // zadelbuis
+  lijn(T.x, T.y, B.x, B.y, 0.085, kl);          // onderbuis
+  lijn(Z.x, Z.y, B.x, B.y, 0.080, kl);          // bovenbuis
+  lijn(B.x, B.y, V.x, V.y, 0.075, kl2);         // voorvork
+  lijn(B.x, B.y - 0.02, F.stuur.x, F.stuur.y, 0.055, kl2);
+
+  // Zadel en stuurlint
+  ctx.fillStyle = '#1e1e22';
+  ctx.beginPath();
+  ctx.ellipse(Z.x - 0.02, Z.y + 0.05, 0.15, 0.045, -0.12, 0, Math.PI * 2);
+  ctx.fill();
+  cirkel(F.stuur.x, F.stuur.y, 0.06, '#1e1e22');
+
+  // Kettingblad en ketting
+  ring(T.x, T.y, 0.115, 0.035, '#8d8d92');
+  lijn(T.x, T.y + 0.11, A.x, A.y + 0.055, 0.030, '#8d8d92');
+  lijn(T.x, T.y - 0.11, A.x, A.y - 0.055, 0.030, '#8d8d92');
+
+  /* ---- De fietser ----
+     Heup en schouder liggen vast, de voeten draaien met de
+     trappers mee, en de knieën volgen daaruit. Verder is er geen
+     animatie nodig: het trappen is de animatie. */
+  const heup = { x: Z.x + 0.05, y: Z.y + 0.10 };
+  const schouder = { x: 0.10, y: 1.33 };
+  const hoofd = { x: 0.21, y: 1.50 };
+
+  for (const kant of [-1, 1]) {
+    const donker = kant < 0;
+    const a = f.trapfase + (kant < 0 ? Math.PI : 0);
+    const voet = { x: T.x + Math.cos(a) * F.crank, y: T.y + Math.sin(a) * F.crank };
+    const knie = knieVan(heup.x, heup.y, voet.x, voet.y, F.bovenbeen, F.onderbeen, 1);
+
+    // De trapper zelf
+    lijn(T.x, T.y, voet.x, voet.y, 0.040, donker ? '#6e6e74' : '#8d8d92');
+
+    const broek = donker ? '#2a3145' : '#39425c';
+    const schoen = donker ? '#15151a' : '#22222a';
+    lijn(heup.x, heup.y, knie.x, knie.y, 0.135, broek);
+    lijn(knie.x, knie.y, voet.x, voet.y, 0.110, broek);
+    cirkel(voet.x + 0.04, voet.y, 0.075, schoen);
+
+    // Arm aan dezelfde kant
+    const elleboog = knieVan(schouder.x, schouder.y, F.stuur.x, F.stuur.y,
+                             F.bovenarm, F.onderarm, -1);
+    const mouw = donker ? sombere(fiets.shirt) : fiets.shirt;
+    lijn(schouder.x, schouder.y, elleboog.x, elleboog.y, 0.100, mouw);
+    lijn(elleboog.x, elleboog.y, F.stuur.x, F.stuur.y, 0.085, fiets.huid);
+  }
+
+  // Romp
+  lijn(heup.x, heup.y, schouder.x, schouder.y, 0.30, fiets.shirt);
+  // Nek en hoofd
+  lijn(schouder.x, schouder.y, hoofd.x, hoofd.y - 0.06, 0.11, fiets.huid);
+  cirkel(hoofd.x, hoofd.y, 0.135, fiets.huid);
+
+  // Helm: een halve schaal met een klepje
+  ctx.beginPath();
+  ctx.arc(hoofd.x, hoofd.y + 0.01, 0.155, Math.PI * 1.02, Math.PI * 2.05);
+  ctx.closePath();
+  ctx.fillStyle = '#3f7fd0';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hoofd.x + 0.10, hoofd.y + 0.02);
+  ctx.lineTo(hoofd.x + 0.29, hoofd.y - 0.03);
+  ctx.lineTo(hoofd.x + 0.10, hoofd.y - 0.05);
+  ctx.closePath();
+  ctx.fillStyle = '#2f63a8';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* Een donkerdere versie van dezelfde kleur, voor de arm en het
+   been aan de andere kant van de fiets. */
+function sombere(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * 0.68);
+  const g = Math.round(((n >> 8) & 255) * 0.68);
+  const b = Math.round((n & 255) * 0.68);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+
+/* ============================================================
+   Camera en het hele plaatje
+   ============================================================ */
+function zetCamera(f, pad, dt, meteen) {
+  const doelX = f.x;
+  // Iets vooruitkijken als je hard gaat, zodat je niet blind een
+  // schans in rijdt.
+  const vooruit = Math.min(6, Math.max(0, f.v) * 0.35);
+  const doelY = f.y + 2.0;
+
+  if (meteen) {
+    camX = doelX + vooruit;
+    camY = doelY;
+    return;
+  }
+  const k = Math.min(1, INST.camVolgen * dt);
+  camX += (doelX + vooruit - camX) * k;
+  camY += (doelY - camY) * k;
+}
+
+function teken(f, pad, wereld) {
+  const kl = wereld.kleuren;
+  const t = performance.now() / 1000;
+
+  tekenLucht(kl);
+  tekenVerte(kl);
+  tekenDecor(wereld, t);
+
+  // Een crash of een harde landing schudt het beeld
+  const schud = f && f.schud > 0 ? f.schud : 0;
+  ctx.save();
+  if (schud > 0) {
+    ctx.translate((Math.random() - 0.5) * schud * 14, (Math.random() - 0.5) * schud * 14);
+  }
+
+  wereldAan();
+  tekenTerrein(pad, kl);
+  tekenFinish(pad, kl);
+  tekenMunten(pad);
+  tekenDeeltjes();
+  if (f) {
+    f.schaduwY = grondBij(pad, f.x, f.hint).y + 0.02;
+    tekenFiets(f, huidigeFiets());
+  }
+  wereldUit();
+
+  ctx.restore();
+}
+
+/* Het rustige plaatje achter de menu's: dezelfde wereld, maar
+   niemand rijdt erop. Aan het eind van de baan begint hij gewoon
+   opnieuw -- anders rijdt de camera na een minuut het landschap
+   uit en staar je naar lege lucht. */
+function tekenAchtergrond(pad, wereld, dt) {
+  camX += dt * 3.2;
+  const eind = pad.pt[pad.pt.length - 1].x - 30;
+  if (camX > eind || camX < 0) camX = 0;
+  const g = grondBij(pad, camX, 0);
+  camY += ((g.y + 2.4) - camY) * Math.min(1, dt * 2);
+  teken(null, pad, wereld);
+}
+
+/* ---------- js/spel.js ---------- */
+/* ============================================================
+   PEDAL!  --  9. HET SPEL
+
+   De lus, de toestand waarin het spel verkeert, en jouw vingers.
+   De natuurkunde staat hiernaast; dit bestand beslist alleen
+   wanneer die mag draaien en wat er daarna gebeurt.
+
+   Eén woord, `toestand`, stuurt alles aan:
+
+       'menu'    de wereld schuift rustig achter de menu's door
+       'spelen'  je rijdt
+       'pauze'   bevroren beeld, paneel eroverheen
+       'klaar'   idem, met het eindscherm eroverheen
+   ============================================================ */
+
+let toestand = 'menu';
+let level = null;
+let pad = null;
+let spec = null;
+let rit = null;
+
+let muntStaat = null;
+let vorigeModus = 'grond';
+let luchtHoogte = 0;          // hoogste punt van de laatste sprong
+let hintWeg = false;
+
+const invoer = { trapt: false, remt: false };
+
+
+/* ============================================================
+   Een run beginnen
+   ============================================================ */
+function startLevel(nummer) {
+  level = LEVELS[nummer];
+  pad = padVan(level);
+  spec = huidigeSpec();
+
+  // Het pad wordt hergebruikt tussen pogingen; dit zet ook de munten
+  // terug die je vorige keer hebt opgeraapt.
+  muntStaat = nieuweMuntenStaat(pad);
+
+  rit = nieuweRit(pad, spec);
+  vorigeModus = 'grond';
+  luchtHoogte = 0;
+  deeltjes = [];
+  invoer.trapt = false;
+  invoer.remt = false;
+
+  zetCamera(rit, pad, 0, true);
+  zetHudVast();
+
+  hintWeg = false;
+  document.getElementById('hint').classList.remove('verborgen');
+
+  toestand = 'spelen';
+  schuld = 0;
+  toonPaneel(null);
+}
+
+function opnieuw() { startLevel(level.nummer); }
+
+
+/* Het oprapen zelf staat in natuurkunde.js, omdat de simulatie het
+   ook nodig heeft. Hier komt alleen het gefonkel erbij. */
+function raapMunten() {
+  const gepakt = pakMunten(pad, rit, spec, muntStaat);
+  for (const m of gepakt) maakDeeltjes(m.x, m.y, 5, '#f0c04a', 1.6);
+}
+
+
+/* ============================================================
+   Stof, klappen en tril
+
+   Alles wat je voelt maar wat niets aan de natuurkunde
+   verandert. Het staat hier los zodat de simulatie er niet mee
+   te maken heeft.
+   ============================================================ */
+function tril(ms) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* mag falen */ }
+}
+
+function kijkNaarLanding() {
+  if (rit.modus === 'lucht') {
+    luchtHoogte = Math.max(luchtHoogte, rit.y - grondBij(pad, rit.x, rit.hint).y);
+  }
+
+  if (vorigeModus === 'lucht' && rit.modus === 'grond' && !rit.einde) {
+    const hard = Math.min(1, luchtHoogte / 4);
+    maakDeeltjes(rit.x, rit.y + 0.1, 8 + Math.round(hard * 14), '#d8cbb0', 1.6 + hard * 2.4);
+    if (hard > 0.35) tril(12);
+    luchtHoogte = 0;
+  }
+  if (vorigeModus === 'grond' && rit.modus === 'lucht') luchtHoogte = 0;
+
+  vorigeModus = rit.modus;
+}
+
+
+/* ============================================================
+   De HUD
+
+   Alleen tekst en twee balkjes. We schrijven wat er verandert
+   en niets meer -- op een telefoon is elke overbodige
+   stijlwijziging een gemiste frame.
+   ============================================================ */
+const hudEl = {};
+['hud', 'hint', 'staminaVulling', 'hudAfstand', 'hudSnelheid', 'hudGeld',
+ 'voortgangVulling', 'voortgangBeste', 'vlakRem', 'vlakTrap'].forEach((id) => {
+  hudEl[id] = document.getElementById(id);
+});
+
+let hudVorig = { m: -1, kmh: -1, geld: -1, klasse: '' };
+
+function zetHudVast() {
+  hudVorig = { m: -1, kmh: -1, geld: -1, klasse: '' };
+  const beste = dossier.verste[level.nummer];
+  const el = hudEl.voortgangBeste;
+  if (beste > 20 && beste < level.lengte) {
+    el.style.display = 'block';
+    el.style.left = Math.min(99, (beste / level.lengte) * 100) + '%';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function werkHudBij() {
+  const m = Math.round(Math.min(rit.verX, level.lengte));
+  if (m !== hudVorig.m) {
+    hudEl.hudAfstand.textContent = m + ' m';
+    hudEl.voortgangVulling.style.width = Math.min(100, (m / level.lengte) * 100) + '%';
+    hudVorig.m = m;
+  }
+
+  const k = Math.round(kmh(rit.modus === 'lucht' ? Math.hypot(rit.vx, rit.vy) : rit.v));
+  if (k !== hudVorig.kmh) {
+    hudEl.hudSnelheid.textContent = k + ' km/h';
+    hudVorig.kmh = k;
+  }
+
+  const verdiend = Math.round(
+    Math.min(rit.verX, level.lengte) * INST.geldPerMeter +
+    muntStaat.aantal * INST.muntWaarde * spec.geldMaal);
+  if (verdiend !== hudVorig.geld) {
+    hudEl.hudGeld.textContent = geld(verdiend);
+    hudVorig.geld = verdiend;
+  }
+
+  const deel = rit.stamina / spec.staminaMax;
+  hudEl.staminaVulling.style.transform = 'scaleX(' + Math.max(0, deel) + ')';
+  const klasse = deel < 0.12 ? 'op' : deel < 0.32 ? 'moe' : '';
+  if (klasse !== hudVorig.klasse) {
+    hudEl.staminaVulling.className = 'stamina-vulling' + (klasse ? ' ' + klasse : '');
+    hudVorig.klasse = klasse;
+  }
+}
+
+
+/* ============================================================
+   Het einde van een run
+   ============================================================ */
+function rekenBuit(gehaald) {
+  // Let op de volgorde: dit moet gebeuren vóór noteerPoging, anders
+  // is "de eerste keer" altijd al voorbij.
+  const eerste = gehaald && !dossier.gehaald[level.nummer];
+  return buitVan(level, {
+    verX: rit.verX,
+    munten: muntStaat.aantal,
+    gehaald: gehaald,
+  }, spec, eerste);
+}
+
+function eindigRun() {
+  toestand = 'klaar';
+  const gehaald = rit.einde === 'finish';
+
+  if (rit.einde === 'crash') {
+    maakDeeltjes(rit.x, rit.y + 0.4, 26, '#c8b89a', 3.2);
+    tril([30, 40, 60]);
+  }
+
+  const buit = rekenBuit(gehaald);
+  noteerPoging(level, rit.verX, gehaald);
+  verdien(buit.totaal);
+  toonResultaat(gehaald, buit);
+}
+
+
+/* ============================================================
+   De besturing
+
+   Vasthouden, niet vegen. Twee vlakken die elk hun eigen vinger
+   bijhouden, zodat je met twee duimen tegelijk kunt remmen en
+   trappen -- dat heb je in de lucht nodig om bij te sturen.
+   ============================================================ */
+function knoopVlakAan(el, sleutel) {
+  const vingers = new Set();
+
+  const aan = (e) => {
+    if (toestand !== 'spelen') return;
+    e.preventDefault();
+    vingers.add(e.pointerId);
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* niet erg */ }
+    invoer[sleutel] = true;
+    el.classList.add('aan');
+    verbergHint();
+  };
+  const uit = (e) => {
+    vingers.delete(e.pointerId);
+    if (vingers.size === 0) {
+      invoer[sleutel] = false;
+      el.classList.remove('aan');
+    }
+  };
+
+  el.addEventListener('pointerdown', aan);
+  el.addEventListener('pointerup', uit);
+  el.addEventListener('pointercancel', uit);
+  el.addEventListener('pointerleave', uit);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+knoopVlakAan(hudEl.vlakTrap, 'trapt');
+knoopVlakAan(hudEl.vlakRem, 'remt');
+
+function verbergHint() {
+  if (hintWeg) return;
+  hintWeg = true;
+  hudEl.hint.classList.add('verborgen');
+}
+
+/* Op de pc testen zonder muis */
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (e.key === 'ArrowRight' || e.key === 'x' || e.key === 'X') { invoer.trapt = true; verbergHint(); }
+  if (e.key === 'ArrowLeft' || e.key === 'z' || e.key === 'Z') { invoer.remt = true; verbergHint(); }
+  if (e.key === 'Escape' && toestand === 'spelen') pauzeer();
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'x' || e.key === 'X') invoer.trapt = false;
+  if (e.key === 'ArrowLeft' || e.key === 'z' || e.key === 'Z') invoer.remt = false;
+});
+
+function pauzeer() {
+  if (toestand !== 'spelen') return;
+  toestand = 'pauze';
+  invoer.trapt = false;
+  invoer.remt = false;
+  hudEl.vlakTrap.classList.remove('aan');
+  hudEl.vlakRem.classList.remove('aan');
+  toonPaneel(document.getElementById('pauze'));
+}
+
+function hervat() {
+  if (toestand !== 'pauze') return;
+  toestand = 'spelen';
+  vorigeTijd = 0;      // anders komt er één enorme stap voorbij
+  schuld = 0;
+  toonPaneel(null);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauzeer();
+});
+
+
+/* ============================================================
+   De lus
+
+   De natuurkunde loopt op een vaste stap van 1/120 seconde,
+   los van hoe snel het scherm ververst. Anders rijdt dezelfde
+   fiets op een 120Hz-telefoon anders dan op een 60Hz-telefoon,
+   en dan klopt de simulatie ook niet meer met het echte spel.
+   ============================================================ */
+const STAP = 1 / 120;
+let vorigeTijd = 0;
+let schuld = 0;
+
+/* Een rustige polder achter de menu's. Niet het eerste level --
+   dat is expres kaarsvlak en dus saai om naar te kijken. */
+const menuLevel = LEVELS[6];
+const menuPad = padVan(menuLevel);
+
+function lus(nu) {
+  requestAnimationFrame(lus);
+  if (!vorigeTijd) { vorigeTijd = nu; return; }
+  let dt = (nu - vorigeTijd) / 1000;
+  vorigeTijd = nu;
+  if (dt > 0.1) dt = 0.1;
+
+  if (toestand === 'spelen') {
+    schuld += dt;
+    let rondjes = 0;
+    while (schuld >= STAP && rondjes++ < 40 && !rit.einde) {
+      stapFiets(rit, STAP, invoer, spec, pad);
+      kijkNaarLanding();
+      schuld -= STAP;
+    }
+    if (schuld > 0.25) schuld = 0;
+
+    raapMunten();
+    zetCamera(rit, pad, dt, false);
+    werkDeeltjesBij(dt);
+    teken(rit, pad, level.wereld);
+    werkHudBij();
+    if (rit.einde) eindigRun();
+
+  } else if (toestand === 'pauze' || toestand === 'klaar') {
+    werkDeeltjesBij(dt);
+    teken(rit, pad, level.wereld);
+
+  } else {
+    tekenAchtergrond(menuPad, menuLevel.wereld, dt);
+  }
+}
+
+pasMaatAan();
+camX = 0;
+camY = 3;
+requestAnimationFrame(lus);
+
+/* ---------- js/schermen.js ---------- */
+/* ============================================================
+   PEDAL!  --  10. DE SCHERMEN
+
+   De panelen staan al in index.html; hier worden ze alleen
+   gevuld en aan- en uitgezet. Er is geen router en geen
+   sjabloontaal: één functie zet het juiste paneel aan, en elk
+   scherm bouwt zijn eigen lijstje opnieuw op als het in beeld
+   komt. Bij tien regels per lijst is dat sneller dan bijhouden
+   wat er veranderd is, en het kan nooit uit de pas lopen.
+   ============================================================ */
+
+const P = {};
+['menu', 'wereldkiezer', 'levelkiezer', 'garage', 'resultaat', 'instellingen', 'pauze']
+  .forEach((id) => { P[id] = document.getElementById(id); });
+
+const ALLE_PANELEN = Object.keys(P).map((k) => P[k]);
+
+let gekozenWereld = WERELDEN[0];
+let vorigPaneel = 'menu';        // waar de knop Back in de garage heen gaat
+
+function toonPaneel(paneel) {
+  ALLE_PANELEN.forEach((p) => p.classList.toggle('verborgen', p !== paneel));
+  hudEl.hud.classList.toggle('verborgen', paneel !== null && paneel !== P.pauze);
+  if (paneel && paneel !== P.pauze) hudEl.hint.classList.add('verborgen');
+  werkBeursBij();
+}
+
+/* Terug naar de menu's: dan mag de wereld weer rustig
+   doorschuiven achter de panelen. */
+function naarMenu() {
+  if (toestand !== 'menu') {
+    toestand = 'menu';
+    camY = 3;
+  }
+}
+
+function werkBeursBij() {
+  const t = geld(dossier.geld);
+  ['beursMenu', 'beursWereld', 'beursLevel', 'beursGarage'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t;
+  });
+}
+
+/* ---- Kleine bouwstenen ---- */
+function knop(tekst, klasse, klik) {
+  const b = document.createElement('button');
+  b.className = 'knop' + (klasse ? ' ' + klasse : '');
+  b.textContent = tekst;
+  b.addEventListener('click', klik);
+  return b;
+}
+
+function aan(id, doe) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', doe);
+}
+
+
+/* ============================================================
+   Titelscherm
+   ============================================================ */
+function toonMenu() {
+  naarMenu();
+  toonPaneel(P.menu);
+}
+
+
+/* ============================================================
+   Werelden
+   ============================================================ */
+function toonWereldkiezer() {
+  naarMenu();
+  const lijst = document.getElementById('wereldlijst');
+  lijst.innerHTML = '';
+
+  WERELDEN.forEach((w) => {
+    const open = wereldVrij(w);
+    const uit = w.levels.filter((lv) => dossier.gehaald[lv.nummer]).length;
+
+    const kaart = document.createElement('button');
+    kaart.className = 'wereldkaart' + (open ? '' : ' op-slot');
+    kaart.disabled = !open;
+    kaart.innerHTML =
+      '<span class="wereldicoon">' + (open ? w.icoon : '🔒') + '</span>' +
+      '<span class="wereldtekst">' +
+        '<b>' + (open ? w.naam : '???') + '</b>' +
+        '<i>' + (open ? w.ondertitel : 'Finish the world before this one') + '</i>' +
+      '</span>' +
+      '<span class="levelmeters">' + (open ? uit + '/' + w.levels.length : '') + '</span>';
+
+    kaart.addEventListener('click', () => toonLevelkiezer(w));
+    lijst.appendChild(kaart);
+  });
+
+  toonPaneel(P.wereldkiezer);
+}
+
+
+/* ============================================================
+   Levels
+
+   Op elke kaart staat of je hem haalt. Dat is geen inschatting:
+   voor elk vrijgespeeld level rijdt de simulatie hem even uit
+   met jouw fiets. Bij het eerste level dat niet lukt zoeken we
+   ook op wat je ervoor nodig hebt -- dat is duurder, dus dat
+   doen we precies één keer.
+   ============================================================ */
+function toonLevelkiezer(wereld) {
+  naarMenu();
+  gekozenWereld = wereld || gekozenWereld;
+
+  const rooster = document.getElementById('rooster');
+  rooster.innerHTML = '';
+  document.getElementById('levelkiezerKop').textContent =
+    gekozenWereld.icoon + ' ' + gekozenWereld.naam;
+
+  let eisGetoond = false;
+
+  gekozenWereld.levels.forEach((lv) => {
+    const i = lv.nummer;
+    const open = isVrijgespeeld(i);
+    const uit = dossier.gehaald[i];
+
+    let kan = null;
+    if (open) kan = kanVan(lv, dossier.upgrades, huidigeFiets());
+
+    const kaart = document.createElement('button');
+    kaart.className = 'levelkaart' + (open ? '' : ' op-slot') +
+      (uit ? ' gehaald' : '') + (open && kan && !kan.kan ? ' te-zwaar' : '');
+    kaart.disabled = !open;
+
+    let onder;
+    if (!open) {
+      onder = 'Finish the level before this one';
+    } else if (kan.kan) {
+      onder = uit ? 'Cleared ✓' : 'Your bike can do this';
+    } else if (!eisGetoond) {
+      eisGetoond = true;
+      onder = eisVan(lv, dossier.upgrades, huidigeFiets()).tekst;
+    } else {
+      onder = 'Too much for this bike';
+    }
+
+    const verste = dossier.verste[i];
+    const zover = open && !uit && verste > 20
+      ? '<u>Best run: ' + Math.round((verste / lv.lengte) * 100) + '%</u>' : '';
+
+    kaart.innerHTML =
+      '<span class="levelnr">' + (lv.inWereld + 1) + '</span>' +
+      '<span class="leveltekst">' +
+        '<b>' + (open ? lv.naam : '???') + '</b>' +
+        '<i>' + onder + '</i>' + zover +
+      '</span>' +
+      '<span class="levelmeters">' + lv.lengte + ' m</span>';
+
+    kaart.addEventListener('click', () => startLevel(i));
+    rooster.appendChild(kaart);
+  });
+
+  toonPaneel(P.levelkiezer);
+}
+
+
+/* ============================================================
+   De garage
+
+   Twee tabbladen op één paneel: onderdelen en fietsen. Na een
+   aankoop wordt de lijst gewoon helemaal opnieuw opgebouwd --
+   dat is één regel, en dan kan er niets meer verouderd op het
+   scherm blijven staan.
+   ============================================================ */
+let garageTab = 'onderdelen';
+
+function toonGarage(vanaf) {
+  naarMenu();
+  if (vanaf) vorigPaneel = vanaf;
+
+  document.getElementById('tabOnderdelen').classList.toggle('tab-aan', garageTab === 'onderdelen');
+  document.getElementById('tabFietsen').classList.toggle('tab-aan', garageTab === 'fietsen');
+  document.getElementById('onderdeellijst').classList.toggle('verborgen', garageTab !== 'onderdelen');
+  document.getElementById('fietsenlijst').classList.toggle('verborgen', garageTab !== 'fietsen');
+
+  if (garageTab === 'onderdelen') vulOnderdelen(); else vulFietsen();
+  toonPaneel(P.garage);
+}
+
+function vulOnderdelen() {
+  const lijst = document.getElementById('onderdeellijst');
+  lijst.innerHTML = '';
+
+  ONDERDELEN.forEach((u) => {
+    const n = niveauVan(u.sleutel);
+    const prijs = upgradePrijs(u, n);
+    const kanBetalen = prijs !== null && dossier.geld >= prijs;
+
+    const rij = document.createElement('div');
+    rij.className = 'item' + (prijs === null ? ' vol' : '');
+    rij.innerHTML =
+      '<span class="item-icoon">' + u.icoon + '</span>' +
+      '<span class="item-tekst">' +
+        '<b>' + u.naam + ' <span class="bolletjes">' + bolletjes(n, u.max) + '</span></b>' +
+        '<i>' + u.uitleg + '</i>' +
+        '<u>Now: ' + u.beschrijf(n) +
+          (prijs !== null ? ' → ' + u.beschrijf(n + 1) : ' (max)') + '</u>' +
+      '</span>';
+
+    const vak = document.createElement('span');
+    vak.className = 'item-knop';
+    if (prijs === null) {
+      vak.innerHTML = '<span class="klaar">Max</span>';
+    } else {
+      const b = knop(geld(prijs), kanBetalen ? '' : 'knop-stil', () => {
+        if (!betaal(prijs)) return;
+        dossier.upgrades[u.sleutel] = n + 1;
+        bewaarDossier();
+        tril(12);
+        toonGarage();
+      });
+      b.disabled = !kanBetalen;
+      vak.appendChild(b);
+    }
+    rij.appendChild(vak);
+    lijst.appendChild(rij);
+  });
+}
+
+function vulFietsen() {
+  const lijst = document.getElementById('fietsenlijst');
+  lijst.innerHTML = '';
+
+  FIETSEN.forEach((f) => {
+    const heb = heeftFiets(f);
+    const nu = f.sleutel === dossier.fiets;
+    const kanBetalen = dossier.geld >= f.prijs;
+
+    // Wat deze fiets met jouw huidige onderdelen zou doen
+    const spec = maakSpec(dossier.upgrades, f);
+
+    const rij = document.createElement('div');
+    rij.className = 'item' + (heb ? '' : ' op-slot') + (nu ? ' gekozen' : '');
+    rij.innerHTML =
+      '<span class="item-icoon">' + f.icoon + '</span>' +
+      '<span class="item-tekst">' +
+        '<b>' + f.naam + '</b>' +
+        '<i>' + f.korte + '</i>' +
+        '<u>' + kmh(spec.topV).toFixed(1) + ' km/h · ' +
+          Math.round(spec.staminaMax / spec.kosten) + ' s of climbing</u>' +
+        f.plus.map((t) => '<em class="plus">+ ' + t + '</em>').join('') +
+        f.min.map((t) => '<em class="min">− ' + t + '</em>').join('') +
+      '</span>';
+
+    const vak = document.createElement('span');
+    vak.className = 'item-knop';
+    if (nu) {
+      vak.innerHTML = '<span class="klaar">Riding</span>';
+    } else if (heb) {
+      vak.appendChild(knop('Select', '', () => {
+        dossier.fiets = f.sleutel;
+        bewaarDossier();
+        tril(10);
+        toonGarage();
+      }));
+    } else {
+      const b = knop(geld(f.prijs), kanBetalen ? '' : 'knop-stil', () => {
+        if (!betaal(f.prijs)) return;
+        dossier.gekocht.push(f.sleutel);
+        dossier.fiets = f.sleutel;
+        bewaarDossier();
+        tril(20);
+        toonGarage();
+      });
+      b.disabled = !kanBetalen;
+      vak.appendChild(b);
+    }
+    rij.appendChild(vak);
+    lijst.appendChild(rij);
+  });
+}
+
+
+/* ============================================================
+   Het eindscherm
+
+   Een spotregel voor de sfeer, en daaronder een tip die echt
+   ergens over gaat: hij kijkt naar hoe je run afliep en naar
+   wat de simulatie zegt dat je nodig hebt. Nooit "probeer het
+   nog eens".
+   ============================================================ */
+const SPOT = [
+  'That hill has seen worse.',
+  'Somewhere a race official is laughing.',
+  'The bike is fine. That is something.',
+  'Cycling is mostly about knowing when to stop.',
+  'A shorter route would have been sensible.',
+  'Nobody saw that. Probably.',
+  'Your legs have filed a complaint.',
+];
+
+const LOF = [
+  'That was properly ridden.',
+  'Straight through, no messing about.',
+  'The bike did what it was told.',
+  'Smooth all the way.',
+];
+
+let vorigeSpot = '';
+function pakSpot(lijst) {
+  let t = lijst[Math.floor(Math.random() * lijst.length)];
+  if (t === vorigeSpot && lijst.length > 1) {
+    t = lijst[(lijst.indexOf(t) + 1) % lijst.length];
+  }
+  vorigeSpot = t;
+  return t;
+}
+
+function tipNaAfloop(gehaald) {
+  if (gehaald) {
+    const volgende = LEVELS[level.nummer + 1];
+    if (volgende && volgende.wereld === level.wereld) return 'Next: ' + volgende.naam + '.';
+    if (volgende) return 'That is this world done. ' + volgende.wereld.naam + ' is open.';
+    return 'That was the last one. All of it. Well done.';
+  }
+
+  if (rit.einde === 'crash') {
+    return 'You landed too crooked. In the air, PEDAL lifts the nose and BRAKE drops it — ' +
+           'aim to match the slope you are coming down on. Suspension widens the window.';
+  }
+
+  const eis = eisVan(level, dossier.upgrades, huidigeFiets());
+  if (eis.kan) {
+    return 'This one is doable on your bike — you just have to spend your legs better. ' +
+           'Stop pedalling on the descents; the bar fills back up while you roll.';
+  }
+  if (eis.opties.length === 0) {
+    return 'Riding better will not fix this: the bike itself is not enough for this level. ' +
+           'Time for a different one.';
+  }
+  const beste = eis.opties[0];
+  let t = 'Riding better will not fix this. ' + beste.onderdeel.naam + ' at ' +
+          bolletjes(beste.niveau, beste.onderdeel.max) + ' does, for ' + geld(beste.prijs) + '.';
+  if (eis.opties.length > 1) {
+    const b = eis.opties[1];
+    t += ' ' + b.onderdeel.naam + ' also works, for ' + geld(b.prijs) + '.';
+  }
+  return t;
+}
+
+function toonResultaat(gehaald, buit) {
+  const kop = gehaald ? 'Finished!' : rit.einde === 'crash' ? 'Down you go' : 'Legs gone';
+  document.getElementById('resultaatKop').textContent = kop;
+  document.getElementById('resultaatSpot').textContent = pakSpot(gehaald ? LOF : SPOT);
+
+  const ver = Math.round(rit.verX);
+  document.getElementById('resultaatInfo').textContent = gehaald
+    ? 'All ' + level.lengte + ' m, in ' + Math.round(rit.tijd) + ' seconds, with ' +
+      Math.round((rit.stamina / spec.staminaMax) * 100) + '% left in your legs.'
+    : rit.einde === 'crash'
+      ? 'You went down at ' + ver + ' of ' + level.lengte + ' m.'
+      : 'Your legs gave out at ' + ver + ' of ' + level.lengte + ' m.';
+
+  let regels =
+    '<span><i>Distance</i><b>' + geld(buit.meters) + '</b></span>' +
+    '<span><i>' + muntStaat.aantal + ' coins</i><b>' + geld(buit.uitMunten) + '</b></span>';
+  if (buit.bonus > 0) {
+    regels += '<span><i>Finish bonus' + (buit.eerste ? ' (first time!)' : '') +
+              '</i><b>' + geld(buit.bonus) + '</b></span>';
+  }
+  regels += '<span class="totaal"><i>Earned</i><b>' + geld(buit.totaal) + '</b></span>';
+  document.getElementById('resultaatBuit').innerHTML = regels;
+
+  document.getElementById('resultaatTip').textContent = tipNaAfloop(gehaald);
+
+  const volgende = LEVELS[level.nummer + 1];
+  document.getElementById('knopVolgende').classList.toggle(
+    'verborgen', !(gehaald && volgende && isVrijgespeeld(level.nummer + 1)));
+
+  toonPaneel(P.resultaat);
+}
+
+
+/* ============================================================
+   Instellingen
+   ============================================================ */
+function toonInstellingen() {
+  naarMenu();
+  document.getElementById('knopGeluid')
+    .setAttribute('aria-checked', dossier.geluid ? 'true' : 'false');
+  toonPaneel(P.instellingen);
+}
+
+
+/* ============================================================
+   Alle knoppen aan elkaar knopen
+   ============================================================ */
+aan('knopSpelen', () => toonWereldkiezer());
+aan('knopGarage', () => toonGarage('menu'));
+aan('knopInstellingen', () => toonInstellingen());
+
+aan('knopWereldTerug', () => toonMenu());
+aan('knopLevelTerug', () => toonWereldkiezer());
+aan('knopNaarGarage', () => toonGarage('levels'));
+
+aan('tabOnderdelen', () => { garageTab = 'onderdelen'; toonGarage(); });
+aan('tabFietsen', () => { garageTab = 'fietsen'; toonGarage(); });
+aan('knopGarageTerug', () => {
+  if (vorigPaneel === 'levels') toonLevelkiezer(gekozenWereld); else toonMenu();
+});
+
+aan('knopVolgende', () => startLevel(level.nummer + 1));
+aan('knopOpnieuw', () => opnieuw());
+aan('knopNaarGarage2', () => { gekozenWereld = level.wereld; toonGarage('levels'); });
+aan('knopTerug', () => toonLevelkiezer(level.wereld));
+
+aan('knopStoppen', () => pauzeer());
+aan('knopDoorgaan', () => hervat());
+aan('knopPauzeOpnieuw', () => opnieuw());
+aan('knopPauzeLevels', () => toonLevelkiezer(level.wereld));
+
+aan('knopGeluid', () => {
+  dossier.geluid = !dossier.geluid;
+  bewaarDossier();
+  document.getElementById('knopGeluid')
+    .setAttribute('aria-checked', dossier.geluid ? 'true' : 'false');
+});
+
+aan('knopWissen', () => {
+  const b = document.getElementById('knopWissen');
+  // Twee keer drukken. Eén verdwaalde tik mag niet je hele spel wissen.
+  if (b.dataset.zeker !== 'ja') {
+    b.dataset.zeker = 'ja';
+    b.textContent = 'Really erase everything?';
+    setTimeout(() => { b.dataset.zeker = ''; b.textContent = 'Erase all progress'; }, 4000);
+    return;
+  }
+  wisDossier();
+  b.dataset.zeker = '';
+  b.textContent = 'Erase all progress';
+  toonMenu();
+});
+
+aan('knopInstellingenTerug', () => toonMenu());
+
+/* Het versiestempel. Draai je de losse bestanden, dan is dat
+   nooit ingevuld -- dan zeggen we dat gewoon. */
+const versieEl = document.getElementById('versie');
+if (versieEl.textContent.indexOf('{{') !== -1) versieEl.textContent = 'werkversie';
+
+werkBeursBij();
+toonPaneel(P.menu);
+
+</script>
